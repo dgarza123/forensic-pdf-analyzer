@@ -11,7 +11,7 @@ def compute_sha256(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
 
 def extract_metadata(doc):
-    metadata = doc.metadata
+    metadata = doc.metadata or {}
     return {
         "Format": metadata.get("format", "Not Found"),
         "Title": metadata.get("title", "Not Found"),
@@ -32,18 +32,24 @@ def detect_itext_version(text):
 def detect_js_objects(doc):
     for page in doc:
         text = page.get_text("text")
-        if any(keyword in text for keyword in ["OpenAction", "/JS"]):
+        if any(keyword in text for keyword in ["/OpenAction", "/JS", "/JavaScript"]):
             return True
     return False
 
 def extract_text_from_pdf(file_bytes):
-    with BytesIO(file_bytes) as f:
-        return extract_text(f)
+    try:
+        with BytesIO(file_bytes) as f:
+            return extract_text(f)
+    except Exception as e:
+        return f"Error extracting text: {str(e)}"
 
 def analyze_binary_code(file_bytes):
     binary_alerts = []
     try:
         raw_bytes = bytes(file_bytes)
+        if len(raw_bytes) == 0:
+            return ["⚠️ No binary data found."]
+        
         for offset, size, instruction, hexdump in Decode(raw_bytes, Decode32Bits):
             if "PUSH" in instruction:
                 binary_alerts.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
