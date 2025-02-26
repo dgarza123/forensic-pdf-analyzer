@@ -77,6 +77,7 @@ def main():
         body { background-color: #121212; color: #FFFFFF; }
         .stTextInput, .stFileUploader, .stText, .stMarkdown { color: #FFFFFF !important; }
         .stButton>button { background-color: #333333; color: #FFFFFF; }
+        .css-1d391kg, .css-2trqyj { background-color: #121212 !important; color: #FFFFFF !important; }
         </style>
     """, unsafe_allow_html=True)
     
