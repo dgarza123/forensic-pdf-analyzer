@@ -43,11 +43,19 @@ def extract_text_from_pdf(file_bytes):
         return extract_text(f)
 
 def analyze_binary_code(file_bytes):
-    binary_code = []
-    for offset, size, instruction, hexdump in Decode(bytes(file_bytes), Decode32Bits):
-        if "PUSH" in instruction:
-            binary_code.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
-    return binary_code
+    binary_alerts = []
+    
+    # Convert to bytearray to prevent errors
+    raw_bytes = bytearray(file_bytes)
+    
+    try:
+        for offset, size, instruction, hexdump in Decode(raw_bytes, Decode32Bits):
+            if "PUSH" in instruction:
+                binary_alerts.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
+    except Exception as e:
+        binary_alerts.append(f"⚠️ diStorm64 error: {str(e)}")
+    
+    return binary_alerts
 
 def main():
     st.title("🔍 Forensic PDF Analyzer")
