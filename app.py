@@ -4,8 +4,9 @@ import hashlib
 import chardet  # Detects encoding
 import numpy as np
 from scipy.stats import chisquare  # Chi-Square test for anomalies
+from distorm3 import Decode, Decode16Bits, Decode32Bits, Decode64Bits  # diStorm64 for binary analysis
 
-st.title("🔍 Forensic PDF Analyzer")
+st.title("🔍 Forensic PDF Analyzer - ABCpdf & WCI Focus")
 
 # Upload PDF file
 uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
@@ -20,7 +21,7 @@ if uploaded_file is not None:
     st.write(f"**Filename:** {uploaded_file.name}")
     st.write(f"**File Size:** {len(pdf_bytes)} bytes")
 
-    # Generate SHA-256 hash (helps detect silent modifications)
+    # Generate SHA-256 hash
     file_hash = hashlib.sha256(pdf_bytes).hexdigest()
     st.write(f"**SHA-256 Hash:** `{file_hash}`")
 
@@ -31,16 +32,11 @@ if uploaded_file is not None:
     st.subheader("📋 PDF Metadata")
     metadata = doc.metadata
     metadata_empty = True  
-    metadata_generic = False  
-
-    generic_terms = ["PIC", "Unknown", "Untitled", "Not Available", "N/A"]
 
     if metadata:
         for key, value in metadata.items():
             if value and value.strip():
                 metadata_empty = False
-                if value in generic_terms or len(value) < 3:  
-                    metadata_generic = True
                 st.write(f"**{key.capitalize()}:** {value}")
             else:
                 st.write(f"**{key.capitalize()}:** Not Found")
@@ -48,79 +44,71 @@ if uploaded_file is not None:
     if metadata_empty:
         st.error("⚠️ No metadata detected! This could indicate metadata stripping, redaction, or forgery.")
 
-    if metadata_generic:
-        st.warning("⚠️ This metadata appears generic or possibly fake. Some fraudsters modify metadata to mask document origins.")
+    # ABCpdf & WCI Metadata Detection
+    st.subheader("📂 ABCpdf & WCI Metadata Detection")
 
-    # Deep Metadata Analysis - Searching for old metadata remnants
-    st.subheader("📂 Deep Metadata Scan")
-    hidden_metadata = [line for line in pdf_bytes.split(b'\n') if b'/' in line]
-    if hidden_metadata:
-        st.code(hidden_metadata[:10], language="plaintext")  # Show first 10 metadata entries
-        st.warning("⚠️ Possible hidden metadata remnants detected.")
+    abc_metadata_keys = ["ABCpdf", "WebSupergoo", "BFO", "West Central Indexing", "WCI"]
+    detected_abc_metadata = []
+
+    for key, value in metadata.items():
+        if any(marker in str(value) for marker in abc_metadata_keys):
+            detected_abc_metadata.append(f"**{key}:** {value}")
+
+    if detected_abc_metadata:
+        st.warning("🚨 **ABCpdf or West Central Indexing metadata detected!**")
+        for entry in detected_abc_metadata:
+            st.write(entry)
     else:
-        st.success("✅ No hidden metadata remnants found.")
+        st.success("✅ No ABCpdf or WCI metadata found.")
 
-    # Extract XMP Metadata
-    st.subheader("📂 XMP Metadata (Hidden)")
-    try:
-        xmp = doc.xref_get_key(1, "XMP")
-        if xmp and xmp != ('null', 'null'):
-            st.code(xmp, language="xml")
-        else:
-            st.write("No XMP metadata found.")
-    except:
-        st.write("No XMP metadata found.")
+    # Extract Object References
+    st.subheader("🔎 ABCpdf & WCI Object References")
 
-    # JavaScript Detection
-    st.subheader("⚠️ Advanced JavaScript Detection")
+    abc_object_patterns = [b'/EmbeddedFileStreamElement', b'/Names', b'/JavaScript', b'/OpenAction', b'/FormFieldElement']
+    abc_objects_found = []
+
+    for obj in abc_object_patterns:
+        if obj in pdf_bytes:
+            abc_objects_found.append(obj.decode(errors="ignore"))
+
+    if abc_objects_found:
+        st.error("🚨 **Suspicious ABCpdf object references found!** These could indicate hidden embedded files or automated script actions.")
+        for obj in abc_objects_found:
+            st.write(f"🔍 Found: `{obj}`")
+    else:
+        st.success("✅ No ABCpdf object references detected.")
+
+    # JavaScript & OpenAction Detection
+    st.subheader("⚠️ JavaScript & OpenAction Detection")
+
+    js_like_patterns = [b'/JavaScript', b'/JS', b'/OpenAction']
     js_found = False
-    for page_num, page in enumerate(doc):
-        js_text = page.get_text("text")
-        if "JavaScript" in js_text or "/JS" in js_text:
+
+    for pattern in js_like_patterns:
+        if pattern in pdf_bytes:
             js_found = True
-            st.warning(f"🚨 JavaScript detected on **Page {page_num + 1}**!")
-            st.code(js_text, language="javascript")
+            st.warning(f"🚨 JavaScript/OpenAction reference found: `{pattern.decode(errors='ignore')}`")
 
     if not js_found:
-        st.success("✅ No JavaScript found in this PDF.")
+        st.success("✅ No suspicious JavaScript or OpenAction elements detected.")
 
-    # Extract and Display Text from First Page with Encoding Detection
-    st.subheader("📜 Extracted Text (First Page)")
+    # Encoding Per Page Analysis
+    st.subheader("📜 Encoding Analysis Per Page")
+    encoding_map = {}
 
-    extracted_text = ""
-    detected_encoding = "Unknown"
-    mixed_encoding_flag = False
-
-    if doc.page_count > 0:
-        first_page = doc[0]
-        extracted_text = first_page.get_text("text").strip()
-
-        # Detect encoding
-        encoding_result = chardet.detect(extracted_text.encode())
+    for i, page in enumerate(doc):
+        text = page.get_text("text")
+        encoding_result = chardet.detect(text.encode())
         detected_encoding = encoding_result['encoding']
 
-        # Detect mixed encodings (basic check)
-        if extracted_text and len(set(detected_encoding)) > 1:
-            mixed_encoding_flag = True
+        if detected_encoding:
+            encoding_map[f"Page {i+1}"] = detected_encoding
 
-        # Attempt to decode non-standard encodings
-        if detected_encoding and detected_encoding.lower() in ["utf-16", "utf-16le", "utf-16be"]:
-            try:
-                extracted_text = extracted_text.encode().decode(detected_encoding, errors="ignore")
-            except:
-                extracted_text = "Error decoding 16-bit text."
+    for page, enc in encoding_map.items():
+        st.write(f"**{page}:** {enc}")
 
-        if not extracted_text.strip():
-            st.warning("⚠️ No readable text found on the first page. This could indicate hidden or image-based text.")
-
-        st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
-        st.write(f"🔎 **Detected Encoding:** {detected_encoding if detected_encoding else 'Unknown'}")
-
-        if mixed_encoding_flag:
-            st.error("🚨 Multiple encodings detected! This may indicate manipulation or hidden data.")
-
-    else:
-        st.warning("No pages found in this document.")
+    if len(set(encoding_map.values())) > 1:
+        st.error("🚨 Multiple encodings detected across pages! Possible manipulation or hidden data.")
 
     # Display the number of pages
     st.write(f"**Total Pages:** {doc.page_count}")
@@ -128,11 +116,9 @@ if uploaded_file is not None:
     # Hidden Object Detection
     st.subheader("🕵️ Hidden Elements Detection")
 
-    # Count Images
     image_count = sum(1 for page in doc for img in page.get_images(full=True))
     st.write(f"🔍 **Images Found:** {image_count}")
 
-    # Count Annotations (Comments, Edits)
     annot_count = sum(1 for page in doc for annot in (page.annots() or []))
     st.write(f"📝 **Annotations Found:** {annot_count}")
 
@@ -145,20 +131,32 @@ if uploaded_file is not None:
     else:
         st.write("✅ No embedded files detected.")
 
-    # Steganography Detection: EOF Analysis
-    st.subheader("📌 **EOF (End of File) Check** (Detects hidden data at the end of PDFs)")
-    
+    # EOF Analysis
+    st.subheader("📌 **EOF (End of File) Check**")
+
     pdf_eof_index = pdf_bytes.rfind(b'%%EOF')
     if pdf_eof_index == -1:
         st.error("🚨 No EOF marker found! This could indicate file corruption or tampering.")
     else:
-        extra_data = pdf_bytes[pdf_eof_index + 5:]  # Extract bytes after EOF
+        extra_data = pdf_bytes[pdf_eof_index + 5:]
         extra_data_size = len(extra_data)
 
         st.write(f"📏 **Bytes After EOF:** {extra_data_size}")
 
         if extra_data_size > 0:
             st.error(f"🚨 **Suspicious extra data found ({extra_data_size} bytes) after EOF!** Possible steganography or hidden content.")
-            st.code(extra_data.hex(), language="plaintext")  # Show hex of extra data
-        else:
-            st.success("✅ No extra data detected after EOF.")
+            st.code(extra_data.hex(), language="plaintext")
+
+    # diStorm64 Binary Analysis
+    st.subheader("🔍 Binary Code Analysis with diStorm64")
+    
+    disassembled_code = Decode(0, pdf_bytes[:512], Decode32Bits)
+    found_suspicious_code = False
+
+    for offset, size, instruction, hexdump in disassembled_code:
+        if "CALL" in instruction or "JMP" in instruction or "PUSH" in instruction:
+            st.error(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
+            found_suspicious_code = True
+
+    if not found_suspicious_code:
+        st.success("✅ No suspicious binary operations detected.")
