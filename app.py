@@ -55,7 +55,11 @@ def detect_16bit_encoded_text(file_bytes):
             try:
                 text = file_bytes.decode(encoding, errors="replace").strip()
                 if text:
-                    return get_display(unicodedata.normalize("NFKC", text))
+                    normalized_text = get_display(unicodedata.normalize("NFKC", text))
+                    js_patterns = re.findall(r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()", normalized_text)
+                    if js_patterns:
+                        return f"🚨 Hidden JavaScript detected in Unicode text! Found: {', '.join(set(js_patterns))}"
+                    return normalized_text
             except Exception:
                 continue
         return None
@@ -134,7 +138,7 @@ def main():
             st.text_area("Extracted 16-bit Text:", detected_text, height=200)
         
         st.subheader("🛡 VirusTotal Scan")
-        api_key = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"  # Directly using user-provided key
+        api_key = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"
         vt_result = scan_virustotal(api_key, file_hash)
         if vt_result:
             st.write("✅ VirusTotal scan results available!")
