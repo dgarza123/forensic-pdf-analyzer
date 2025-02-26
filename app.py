@@ -67,9 +67,13 @@ def scan_virustotal(api_key, file_hash):
 
 def main():
     st.title("🔍 Forensic PDF Analyzer")
-    uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+    uploaded_file = st.file_uploader("Upload a PDF (Max 4MB)", type=["pdf"], accept_multiple_files=False)
     
     if uploaded_file is not None:
+        if uploaded_file.size > 4 * 1024 * 1024:
+            st.error("❌ File exceeds 4MB limit. Please upload a smaller file.")
+            return
+        
         file_bytes = uploaded_file.read()
         doc = fitz.open(stream=file_bytes, filetype="pdf")
         file_hash = compute_sha256(file_bytes)
@@ -101,14 +105,16 @@ def main():
             st.write(alert)
         
         st.subheader("🛡 VirusTotal Scan")
-        api_key = st.secrets["virustotal_api_key"]  # Store API key in Streamlit secrets
-        vt_result = scan_virustotal(api_key, file_hash)
-        
-        if vt_result:
-            st.write("✅ VirusTotal scan results available!")
-            st.json(vt_result)
+        api_key = st.secrets.get("virustotal_api_key", None)  # Store API key in Streamlit secrets
+        if api_key:
+            vt_result = scan_virustotal(api_key, file_hash)
+            if vt_result:
+                st.write("✅ VirusTotal scan results available!")
+                st.json(vt_result)
+            else:
+                st.write("⚠️ VirusTotal scan not available or API error.")
         else:
-            st.write("⚠️ VirusTotal scan not available or API error.")
+            st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
         
 if __name__ == "__main__":
     main()
