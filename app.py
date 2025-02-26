@@ -12,7 +12,7 @@ def compute_sha256(file_bytes):
 
 def extract_metadata(doc):
     metadata = doc.metadata or {}
-    pdf_version = doc.metadata.get("format", "Unknown")
+    pdf_version = metadata.get("format", "Unknown")
     version_years = {"1.4": 2001, "1.5": 2003, "1.6": 2004, "1.7": 2006}
     release_year = version_years.get(pdf_version, "Unknown")
     encryption_status = "Secure encryption: No ❌" if "encryption" not in metadata else "Secure encryption: Yes ✅"
@@ -37,6 +37,13 @@ def extract_text_from_pdf(file_bytes):
             return extract_text(f)
     except Exception as e:
         return f"Error extracting text: {str(e)}"
+
+def detect_16bit_encoded_text(file_bytes):
+    try:
+        text = file_bytes.decode("utf-16", errors="ignore")
+        return text if text.strip() else None
+    except Exception:
+        return None
 
 def analyze_binary_code(file_bytes):
     binary_alerts = []
@@ -71,7 +78,7 @@ def extract_xmp_metadata(doc):
         return f"⚠️ XMP Metadata Error: {str(e)}"
 
 def main():
-    st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍")
+    st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍", theme="dark")
     st.markdown("""
         <style>
         body { background-color: #121212; color: #FFFFFF; }
@@ -114,6 +121,11 @@ def main():
         xmp_status = extract_xmp_metadata(doc)
         st.write(xmp_status)
         
+        detected_text = detect_16bit_encoded_text(file_bytes)
+        if detected_text:
+            st.subheader("🕵️ Hidden 16-bit Encoded Text")
+            st.text_area("Extracted 16-bit Text:", detected_text, height=200)
+        
         st.subheader("🛡 VirusTotal Scan")
         api_key = st.secrets.get("virustotal_api_key", None)
         if api_key:
@@ -125,6 +137,6 @@ def main():
                 st.write("⚠️ VirusTotal scan not available or API error.")
         else:
             st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
-    
+
 if __name__ == "__main__":
     main()
