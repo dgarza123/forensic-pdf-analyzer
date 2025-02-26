@@ -4,7 +4,7 @@ import hashlib
 import re
 import requests
 from pdfminer.high_level import extract_text
-from distorm3 import Decode, Decode16Bits, Decode32Bits, Decode64Bits
+from distorm3 import Decode, Decode32Bits
 from io import BytesIO
 
 def compute_sha256(file_bytes):
@@ -27,17 +27,14 @@ def extract_metadata(doc):
 
 def detect_itext_version(text):
     match = re.search(r'iText (\d+\.\d+\.\d+)', text)
-    if match:
-        return match.group(1)
-    return "Not Found"
+    return match.group(1) if match else "Not Found"
 
 def detect_js_objects(doc):
-    js_found = False
     for page in doc:
-        if "OpenAction" in page.get_text("text") or "/JS" in page.get_text("text"):
-            js_found = True
-            break
-    return js_found
+        text = page.get_text("text")
+        if any(keyword in text for keyword in ["OpenAction", "/JS"]):
+            return True
+    return False
 
 def extract_text_from_pdf(file_bytes):
     with BytesIO(file_bytes) as f:
@@ -45,25 +42,20 @@ def extract_text_from_pdf(file_bytes):
 
 def analyze_binary_code(file_bytes):
     binary_alerts = []
-    
-    raw_bytes = bytearray(file_bytes)
-    
     try:
+        raw_bytes = bytes(file_bytes)
         for offset, size, instruction, hexdump in Decode(raw_bytes, Decode32Bits):
             if "PUSH" in instruction:
                 binary_alerts.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
     except Exception as e:
         binary_alerts.append(f"⚠️ diStorm64 error: {str(e)}")
-    
     return binary_alerts
 
 def scan_virustotal(api_key, file_hash):
     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
     headers = {"x-apikey": api_key}
     response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    return None
+    return response.json() if response.status_code == 200 else None
 
 def main():
     st.title("🔍 Forensic PDF Analyzer")
@@ -94,10 +86,7 @@ def main():
         js_found = detect_js_objects(doc)
         
         st.write(f"**iText Version Detected:** {itext_version}")
-        if js_found:
-            st.write("🚨 JavaScript/OpenAction reference found!")
-        else:
-            st.write("✅ No JavaScript found in this PDF.")
+        st.write("🚨 JavaScript/OpenAction reference found!" if js_found else "✅ No JavaScript found in this PDF.")
         
         st.subheader("🔍 Binary Code Analysis with diStorm64")
         binary_alerts = analyze_binary_code(file_bytes)
@@ -105,7 +94,7 @@ def main():
             st.write(alert)
         
         st.subheader("🛡 VirusTotal Scan")
-        api_key = st.secrets.get("virustotal_api_key", None)  # Store API key in Streamlit secrets
+        api_key = st.secrets.get("virustotal_api_key", None)
         if api_key:
             vt_result = scan_virustotal(api_key, file_hash)
             if vt_result:
