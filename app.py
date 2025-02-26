@@ -28,14 +28,18 @@ if uploaded_file is not None:
     # Extract Standard Metadata
     st.subheader("📋 PDF Metadata")
     metadata = doc.metadata
+    metadata_empty = True  # Track if all metadata fields are missing
+
     if metadata:
         for key, value in metadata.items():
             if value and value.strip():
+                metadata_empty = False
                 st.write(f"**{key.capitalize()}:** {value}")
             else:
                 st.write(f"**{key.capitalize()}:** Not Found")
-    else:
-        st.write("No metadata found.")
+
+    if metadata_empty:
+        st.warning("⚠️ No metadata detected! This could indicate a stripped or forged document.")
 
     # Extract XMP Metadata (Hidden Metadata)
     st.subheader("📂 XMP Metadata (Hidden)")
@@ -65,12 +69,15 @@ if uploaded_file is not None:
     st.subheader("📜 Extracted Text (First Page)")
 
     extracted_text = ""
+    detected_encoding = "Unknown"
+
     if doc.page_count > 0:
         first_page = doc[0]
         extracted_text = first_page.get_text("text").strip()
 
         # Detect encoding
-        detected_encoding = chardet.detect(extracted_text.encode())['encoding']
+        encoding_result = chardet.detect(extracted_text.encode())
+        detected_encoding = encoding_result['encoding']
 
         if detected_encoding and detected_encoding.lower() not in ["ascii", "utf-8"]:
             try:
@@ -78,7 +85,11 @@ if uploaded_file is not None:
             except:
                 extracted_text = "Error decoding text."
 
-        st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
+        # If extracted text is empty, warn the user
+        if not extracted_text.strip():
+            st.warning("⚠️ No readable text found on the first page. This could indicate hidden or image-based text.")
+
+        st.text_area("Extracted Text", extracted_text, height=200)
         st.write(f"🔎 **Detected Encoding:** {detected_encoding if detected_encoding else 'Unknown'}")
     else:
         st.warning("No pages found in this document.")
