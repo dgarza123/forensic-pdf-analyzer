@@ -20,7 +20,7 @@ def extract_metadata(doc):
     release_year = version_years.get(pdf_version, "Unknown")
     version_status = "❌ Bad (Outdated)" if release_year != "Unknown" and release_year < 2007 else "✅ Good"
     
-    encryption_status = "❌ No Encryption" if "encryption" not in metadata else "✅ Encrypted"
+    encryption_status = "❌ Content is encrypted, but signatures are missing" if "encryption" in metadata else "✅ No Encryption"
     compliance_status = "❌ Does not meet PDF/A standards for long-term archiving"
     
     creation_date = metadata.get("creationDate", "Unknown")
