@@ -1,6 +1,7 @@
 import streamlit as st
 import fitz  # PyMuPDF
 import hashlib
+import chardet  # Detects encoding
 
 st.title("🔍 Forensic PDF Analyzer")
 
@@ -29,16 +30,21 @@ if uploaded_file is not None:
     metadata = doc.metadata
     if metadata:
         for key, value in metadata.items():
-            st.write(f"**{key.capitalize()}:** {value if value else 'Not Available'}")
+            if value and value.strip():
+                st.write(f"**{key.capitalize()}:** {value}")
+            else:
+                st.write(f"**{key.capitalize()}:** Not Found")
     else:
         st.write("No metadata found.")
 
     # Extract XMP Metadata (Hidden Metadata)
+    st.subheader("📂 XMP Metadata (Hidden)")
     try:
         xmp = doc.xref_get_key(1, "XMP")
-        if xmp:
-            st.subheader("📂 XMP Metadata (Hidden)")
+        if xmp and xmp != ('null', 'null'):
             st.code(xmp, language="xml")
+        else:
+            st.write("No XMP metadata found.")
     except:
         st.write("No XMP metadata found.")
 
@@ -55,12 +61,25 @@ if uploaded_file is not None:
     if not js_found:
         st.success("✅ No JavaScript found in this PDF.")
 
-    # Extract and Display Text from the First Page
+    # Extract and Display Text from the First Page with Encoding Detection
     st.subheader("📜 Extracted Text (First Page)")
+
+    extracted_text = ""
     if doc.page_count > 0:
         first_page = doc[0]
         extracted_text = first_page.get_text("text").strip()
+
+        # Detect encoding
+        detected_encoding = chardet.detect(extracted_text.encode())['encoding']
+
+        if detected_encoding and detected_encoding.lower() not in ["ascii", "utf-8"]:
+            try:
+                extracted_text = extracted_text.encode().decode(detected_encoding, errors="ignore")
+            except:
+                extracted_text = "Error decoding text."
+
         st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
+        st.write(f"🔎 **Detected Encoding:** {detected_encoding if detected_encoding else 'Unknown'}")
     else:
         st.warning("No pages found in this document.")
 
@@ -75,7 +94,7 @@ if uploaded_file is not None:
     st.write(f"🔍 **Images Found:** {image_count}")
 
     # Count Annotations (Comments, Edits)
-    annot_count = sum(1 for page in doc for annot in page.annots() or [])
+    annot_count = sum(1 for page in doc for annot in (page.annots() or []))
     st.write(f"📝 **Annotations Found:** {annot_count}")
 
     # Check for Embedded Files
