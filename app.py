@@ -24,10 +24,6 @@ def extract_metadata(doc):
         "Compliance": compliance_status,
     }
 
-def detect_itext_version(text):
-    match = re.search(r'iText (\d+\.\d+\.\d+)', text)
-    return match.group(1) if match else "Not Found"
-
 def detect_js_objects(doc):
     for page in doc:
         text = page.get_text("text")
@@ -63,15 +59,27 @@ def scan_virustotal(api_key, file_hash):
     return response.json() if response.status_code == 200 else None
 
 def extract_xmp_metadata(doc):
-    xmp_metadata = doc.xref_get_key(0, "/ID")
-    if xmp_metadata:
-        instance_id, document_id = xmp_metadata[1:-1].split(" ")
-        if instance_id != document_id:
-            return "DocumentID / InstanceID Mismatch - Possible Forgery ❌"
-        return "DocumentID / InstanceID Match ✅"
-    return "DocumentID / InstanceID Missing ⚠️"
+    try:
+        xmp_metadata = doc.xref_get_key(0, "/ID")
+        if xmp_metadata:
+            instance_id, document_id = xmp_metadata[1:-1].split(" ")
+            if instance_id != document_id:
+                return "DocumentID / InstanceID Mismatch - Possible Forgery ❌"
+            return "DocumentID / InstanceID Match ✅"
+        return "DocumentID / InstanceID Missing ⚠️"
+    except Exception as e:
+        return f"⚠️ XMP Metadata Error: {str(e)}"
 
 def main():
+    st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍")
+    st.markdown("""
+        <style>
+        body { background-color: #121212; color: #FFFFFF; }
+        .stTextInput, .stFileUploader, .stText, .stMarkdown { color: #FFFFFF !important; }
+        .stButton>button { background-color: #333333; color: #FFFFFF; }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.title("🔍 Forensic PDF Analyzer")
     uploaded_file = st.file_uploader("Upload a PDF (Max 4MB)", type=["pdf"], accept_multiple_files=False)
     
@@ -94,15 +102,9 @@ def main():
         for key, value in metadata.items():
             st.write(f"**{key}:** {value}")
         
-        st.subheader("📂 iText & JavaScript Detection")
-        extracted_text = extract_text_from_pdf(file_bytes)
-        itext_version = detect_itext_version(extracted_text)
         js_found = detect_js_objects(doc)
-        
-        st.write(f"**iText Version Detected:** {itext_version}")
         st.write("🚨 JavaScript/OpenAction reference found!" if js_found else "✅ No JavaScript found in this PDF.")
         
-        st.subheader("🔍 Binary Code Analysis with diStorm64")
         binary_alerts = analyze_binary_code(file_bytes)
         for alert in binary_alerts:
             st.write(alert)
@@ -122,11 +124,6 @@ def main():
                 st.write("⚠️ VirusTotal scan not available or API error.")
         else:
             st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
-    
-    # Update the file uploader text to reflect the new 4MB limit
-    st.markdown("### Upload a PDF (Max 4MB)")
-    st.write("**Drag and drop file here**")
-    st.write("Limit 4MB per file • PDF")
     
 if __name__ == "__main__":
     main()
