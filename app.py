@@ -4,6 +4,7 @@ import hashlib
 
 st.title("🔍 Forensic PDF Analyzer")
 
+# Upload PDF file
 uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
 
 if uploaded_file is not None:
@@ -23,29 +24,65 @@ if uploaded_file is not None:
     # Open the PDF with PyMuPDF
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    # Extract Metadata
-    metadata = doc.metadata
+    # Extract Standard Metadata
     st.subheader("📋 PDF Metadata")
+    metadata = doc.metadata
     if metadata:
         for key, value in metadata.items():
-            st.write(f"**{key}:** {value}")
+            st.write(f"**{key.capitalize()}:** {value if value else 'Not Available'}")
     else:
         st.write("No metadata found.")
 
+    # Extract XMP Metadata (Hidden Metadata)
+    try:
+        xmp = doc.xref_get_key(1, "XMP")
+        if xmp:
+            st.subheader("📂 XMP Metadata (Hidden)")
+            st.code(xmp, language="xml")
+    except:
+        st.write("No XMP metadata found.")
+
     # Check for JavaScript in the PDF
-    st.subheader("⚠️ JavaScript Detection")
-    js_scripts = [page.get_text("text") for page in doc if "JavaScript" in page.get_text("text")]
-    if js_scripts:
-        st.warning("🚨 JavaScript detected in the document!")
-        for script in js_scripts:
-            st.code(script, language="javascript")
-    else:
+    st.subheader("⚠️ Advanced JavaScript Detection")
+    js_found = False
+    for page_num, page in enumerate(doc):
+        js_text = page.get_text("text")
+        if "JavaScript" in js_text or "/JS" in js_text:
+            js_found = True
+            st.warning(f"🚨 JavaScript detected on **Page {page_num + 1}**!")
+            st.code(js_text, language="javascript")
+
+    if not js_found:
         st.success("✅ No JavaScript found in this PDF.")
 
     # Extract and Display Text from the First Page
     st.subheader("📜 Extracted Text (First Page)")
-    first_page_text = doc[0].get_text("text") if doc.page_count > 0 else "No text found."
-    st.text_area("Extracted Text", first_page_text, height=200)
+    if doc.page_count > 0:
+        first_page = doc[0]
+        extracted_text = first_page.get_text("text").strip()
+        st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
+    else:
+        st.warning("No pages found in this document.")
 
     # Display the number of pages
     st.write(f"**Total Pages:** {doc.page_count}")
+
+    # Hidden Object Detection
+    st.subheader("🕵️ Hidden Elements Detection")
+
+    # Count Images
+    image_count = sum(1 for page in doc for img in page.get_images(full=True))
+    st.write(f"🔍 **Images Found:** {image_count}")
+
+    # Count Annotations (Comments, Edits)
+    annot_count = sum(1 for page in doc for annot in page.annots() or [])
+    st.write(f"📝 **Annotations Found:** {annot_count}")
+
+    # Check for Embedded Files
+    embedded_files = doc.embfile_names()
+    if embedded_files:
+        st.write("📎 **Embedded Files Found:**")
+        for file in embedded_files:
+            st.write(f"📂 {file}")
+    else:
+        st.write("✅ No embedded files detected.")
