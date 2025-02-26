@@ -19,13 +19,8 @@ def extract_metadata(doc):
     compliance_status = "Does not meet PDF/A standards for long-term archiving ❌"
     
     return {
-        "Format": f"{pdf_version} (released {release_year}) {'❌' if release_year != 'Unknown' and release_year < 2006 else '✅'}",
-        "Title": metadata.get("title", "Not Found"),
-        "Producer": metadata.get("producer", "Unknown Producer"),
-        "CreationDate": metadata.get("creationDate", "Not Found"),
-        "ModDate": metadata.get("modDate", "Not Found"),
+        "Format": f"{pdf_version} (released {release_year}) {'❌' if release_year != 'Unknown' and release_year < 2002 else '✅'}",
         "Encryption": encryption_status,
-        "Trapped": metadata.get("trapped", "Not Found"),
         "Compliance": compliance_status,
     }
 
@@ -67,6 +62,15 @@ def scan_virustotal(api_key, file_hash):
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else None
 
+def extract_xmp_metadata(doc):
+    xmp_metadata = doc.xref_get_key(0, "/ID")
+    if xmp_metadata:
+        instance_id, document_id = xmp_metadata[1:-1].split(" ")
+        if instance_id != document_id:
+            return "DocumentID / InstanceID Mismatch - Possible Forgery ❌"
+        return "DocumentID / InstanceID Match ✅"
+    return "DocumentID / InstanceID Missing ⚠️"
+
 def main():
     st.title("🔍 Forensic PDF Analyzer")
     uploaded_file = st.file_uploader("Upload a PDF (Max 4MB)", type=["pdf"], accept_multiple_files=False)
@@ -103,6 +107,10 @@ def main():
         for alert in binary_alerts:
             st.write(alert)
         
+        st.subheader("📂 XMP Metadata Verification")
+        xmp_status = extract_xmp_metadata(doc)
+        st.write(xmp_status)
+        
         st.subheader("🛡 VirusTotal Scan")
         api_key = st.secrets.get("virustotal_api_key", None)
         if api_key:
@@ -114,7 +122,7 @@ def main():
                 st.write("⚠️ VirusTotal scan not available or API error.")
         else:
             st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
-        
+    
     # Update the file uploader text to reflect the new 4MB limit
     st.markdown("### Upload a PDF (Max 4MB)")
     st.write("**Drag and drop file here**")
