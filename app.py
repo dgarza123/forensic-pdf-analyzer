@@ -6,6 +6,7 @@ import requests
 from pdfminer.high_level import extract_text
 from distorm3 import Decode, Decode32Bits
 from io import BytesIO
+from datetime import datetime
 
 def compute_sha256(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
@@ -18,10 +19,15 @@ def extract_metadata(doc):
     encryption_status = "Secure encryption: No ❌" if "encryption" not in metadata else "Secure encryption: Yes ✅"
     compliance_status = "Does not meet PDF/A standards for long-term archiving ❌"
     
+    creation_date = metadata.get("creationDate", "Unknown")
+    modification_date = metadata.get("modDate", "Unknown")
+    
     return {
         "Format": f"{pdf_version} (released {release_year}) {'❌' if release_year != 'Unknown' and release_year < 2002 else '✅'}",
         "Encryption": encryption_status,
         "Compliance": compliance_status,
+        "Creation Date": creation_date,
+        "Modification Date": modification_date,
     }
 
 def detect_js_objects(doc):
@@ -41,6 +47,10 @@ def extract_text_from_pdf(file_bytes):
 def detect_16bit_encoded_text(file_bytes):
     try:
         text = file_bytes.decode("utf-16", errors="ignore")
+        if not text.strip():
+            text = file_bytes.decode("utf-16le", errors="ignore")
+        if not text.strip():
+            text = file_bytes.decode("utf-16be", errors="ignore")
         return text if text.strip() else None
     except Exception:
         return None
