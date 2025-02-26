@@ -1,0 +1,6 @@
+streamlit
+pymupdf
+pdfid
+hashlib
+difflib
+watchdog
