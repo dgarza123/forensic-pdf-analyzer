@@ -78,7 +78,7 @@ def extract_xmp_metadata(doc):
         return f"⚠️ XMP Metadata Error: {str(e)}"
 
 def main():
-    st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍", theme="dark")
+    st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍")
     st.markdown("""
         <style>
         body { background-color: #121212; color: #FFFFFF; }
