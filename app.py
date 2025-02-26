@@ -7,6 +7,8 @@ from pdfminer.high_level import extract_text
 from distorm3 import Decode, Decode32Bits
 from io import BytesIO
 from datetime import datetime
+import unicodedata
+from bidi.algorithm import get_display
 
 def compute_sha256(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
@@ -16,14 +18,16 @@ def extract_metadata(doc):
     pdf_version = metadata.get("format", "Unknown")
     version_years = {"1.4": 2001, "1.5": 2003, "1.6": 2004, "1.7": 2006}
     release_year = version_years.get(pdf_version, "Unknown")
-    encryption_status = "Secure encryption: No ❌" if "encryption" not in metadata else "Secure encryption: Yes ✅"
-    compliance_status = "Does not meet PDF/A standards for long-term archiving ❌"
+    version_status = "❌ Bad (Outdated)" if release_year != "Unknown" and release_year < 2007 else "✅ Good"
+    
+    encryption_status = "❌ No Encryption" if "encryption" not in metadata else "✅ Encrypted"
+    compliance_status = "❌ Does not meet PDF/A standards for long-term archiving"
     
     creation_date = metadata.get("creationDate", "Unknown")
     modification_date = metadata.get("modDate", "Unknown")
     
     return {
-        "Format": f"{pdf_version} (released {release_year}) {'❌' if release_year != 'Unknown' and release_year < 2002 else '✅'}",
+        "Format": f"{pdf_version} (released {release_year}) {version_status}",
         "Encryption": encryption_status,
         "Compliance": compliance_status,
         "Creation Date": creation_date,
@@ -34,8 +38,8 @@ def detect_js_objects(doc):
     for page in doc:
         text = page.get_text("text")
         if any(keyword in text for keyword in ["/OpenAction", "/JS", "/JavaScript"]):
-            return True
-    return False
+            return "🚨 JavaScript/OpenAction reference found!"
+    return "✅ No JavaScript found in this PDF."
 
 def extract_text_from_pdf(file_bytes):
     try:
@@ -46,12 +50,15 @@ def extract_text_from_pdf(file_bytes):
 
 def detect_16bit_encoded_text(file_bytes):
     try:
-        text = file_bytes.decode("utf-16", errors="ignore")
-        if not text.strip():
-            text = file_bytes.decode("utf-16le", errors="ignore")
-        if not text.strip():
-            text = file_bytes.decode("utf-16be", errors="ignore")
-        return text if text.strip() else None
+        text = file_bytes.decode("utf-16", errors="replace").strip()
+        if not text:
+            text = file_bytes.decode("utf-16le", errors="replace").strip()
+        if not text:
+            text = file_bytes.decode("utf-16be", errors="replace").strip()
+        if text:
+            text = unicodedata.normalize("NFKC", text)
+            return get_display(text)  # Corrects RTL text display
+        return None
     except Exception:
         return None
 
@@ -81,23 +88,14 @@ def extract_xmp_metadata(doc):
         if xmp_metadata:
             instance_id, document_id = xmp_metadata[1:-1].split(" ")
             if instance_id != document_id:
-                return "DocumentID / InstanceID Mismatch - Possible Forgery ❌"
-            return "DocumentID / InstanceID Match ✅"
-        return "DocumentID / InstanceID Missing ⚠️"
+                return "❌ DocumentID / InstanceID Mismatch - Possible Forgery"
+            return "✅ DocumentID / InstanceID Match"
+        return "⚠️ DocumentID / InstanceID Missing"
     except Exception as e:
         return f"⚠️ XMP Metadata Error: {str(e)}"
 
 def main():
     st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍")
-    st.markdown("""
-        <style>
-        body { background-color: #121212; color: #FFFFFF; }
-        .stTextInput, .stFileUploader, .stText, .stMarkdown { color: #FFFFFF !important; }
-        .stButton>button { background-color: #333333; color: #FFFFFF; }
-        .css-1d391kg, .css-2trqyj { background-color: #121212 !important; color: #FFFFFF !important; }
-        </style>
-    """, unsafe_allow_html=True)
-    
     st.title("🔍 Forensic PDF Analyzer")
     uploaded_file = st.file_uploader("Upload a PDF (Max 4MB)", type=["pdf"], accept_multiple_files=False)
     
@@ -120,16 +118,14 @@ def main():
         for key, value in metadata.items():
             st.write(f"**{key}:** {value}")
         
-        js_found = detect_js_objects(doc)
-        st.write("🚨 JavaScript/OpenAction reference found!" if js_found else "✅ No JavaScript found in this PDF.")
+        st.write(detect_js_objects(doc))
         
         binary_alerts = analyze_binary_code(file_bytes)
         for alert in binary_alerts:
             st.write(alert)
         
         st.subheader("📂 XMP Metadata Verification")
-        xmp_status = extract_xmp_metadata(doc)
-        st.write(xmp_status)
+        st.write(extract_xmp_metadata(doc))
         
         detected_text = detect_16bit_encoded_text(file_bytes)
         if detected_text:
