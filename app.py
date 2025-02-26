@@ -2,6 +2,7 @@ import streamlit as st
 import fitz  # PyMuPDF
 import hashlib
 import re
+import requests
 from pdfminer.high_level import extract_text
 from distorm3 import Decode, Decode16Bits, Decode32Bits, Decode64Bits
 from io import BytesIO
@@ -45,7 +46,6 @@ def extract_text_from_pdf(file_bytes):
 def analyze_binary_code(file_bytes):
     binary_alerts = []
     
-    # Convert to bytearray to prevent errors
     raw_bytes = bytearray(file_bytes)
     
     try:
@@ -57,6 +57,14 @@ def analyze_binary_code(file_bytes):
     
     return binary_alerts
 
+def scan_virustotal(api_key, file_hash):
+    url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
+    headers = {"x-apikey": api_key}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    return None
+
 def main():
     st.title("🔍 Forensic PDF Analyzer")
     uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
@@ -64,11 +72,12 @@ def main():
     if uploaded_file is not None:
         file_bytes = uploaded_file.read()
         doc = fitz.open(stream=file_bytes, filetype="pdf")
+        file_hash = compute_sha256(file_bytes)
         
         st.subheader("📄 File Details")
         st.write(f"Filename: {uploaded_file.name}")
         st.write(f"File Size: {len(file_bytes)} bytes")
-        st.write(f"SHA-256 Hash: {compute_sha256(file_bytes)}")
+        st.write(f"SHA-256 Hash: {file_hash}")
         
         st.subheader("📋 PDF Metadata")
         metadata = extract_metadata(doc)
@@ -90,6 +99,16 @@ def main():
         binary_alerts = analyze_binary_code(file_bytes)
         for alert in binary_alerts:
             st.write(alert)
+        
+        st.subheader("🛡 VirusTotal Scan")
+        api_key = st.secrets["virustotal_api_key"]  # Store API key in Streamlit secrets
+        vt_result = scan_virustotal(api_key, file_hash)
+        
+        if vt_result:
+            st.write("✅ VirusTotal scan results available!")
+            st.json(vt_result)
+        else:
+            st.write("⚠️ VirusTotal scan not available or API error.")
         
 if __name__ == "__main__":
     main()
