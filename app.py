@@ -37,7 +37,7 @@ def extract_metadata(doc):
 def detect_js_objects(doc):
     for page in doc:
         text = page.get_text("text")
-        if any(keyword in text for keyword in ["/OpenAction", "/JS", "/JavaScript"]):
+        if any(keyword in text for keyword in ["/OpenAction", "/JS", "/JavaScript", "/AA", "/Action"]):
             return "🚨 JavaScript/OpenAction reference found!"
     return "✅ No JavaScript found in this PDF."
 
@@ -50,14 +50,14 @@ def extract_text_from_pdf(file_bytes):
 
 def detect_16bit_encoded_text(file_bytes):
     try:
-        text = file_bytes.decode("utf-16", errors="replace").strip()
-        if not text:
-            text = file_bytes.decode("utf-16le", errors="replace").strip()
-        if not text:
-            text = file_bytes.decode("utf-16be", errors="replace").strip()
-        if text:
-            text = unicodedata.normalize("NFKC", text)
-            return get_display(text)  # Corrects RTL text display
+        encodings = ["utf-16", "utf-16le", "utf-16be", "utf-8"]
+        for encoding in encodings:
+            try:
+                text = file_bytes.decode(encoding, errors="replace").strip()
+                if text:
+                    return get_display(unicodedata.normalize("NFKC", text))
+            except Exception:
+                continue
         return None
     except Exception:
         return None
@@ -69,8 +69,9 @@ def analyze_binary_code(file_bytes):
         if len(raw_bytes) == 0:
             return ["⚠️ No binary data found."]
         
-        for offset, size, instruction, hexdump in Decode(raw_bytes, Decode32Bits):
-            if "PUSH" in instruction:
+        decoded_instructions = Decode(raw_bytes, Decode32Bits)
+        for offset, size, instruction in decoded_instructions:
+            if "PUSH" in instruction or "CALL" in instruction:
                 binary_alerts.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
     except Exception as e:
         binary_alerts.append(f"⚠️ diStorm64 error: {str(e)}")
@@ -84,10 +85,10 @@ def scan_virustotal(api_key, file_hash):
 
 def extract_xmp_metadata(doc):
     try:
-        xmp_metadata = doc.xref_get_key(0, "/ID")
+        xmp_metadata = doc.metadata.get("/ID", None)
         if xmp_metadata:
-            instance_id, document_id = xmp_metadata[1:-1].split(" ")
-            if instance_id != document_id:
+            ids = xmp_metadata.strip("[]").split()
+            if len(ids) == 2 and ids[0] != ids[1]:
                 return "❌ DocumentID / InstanceID Mismatch - Possible Forgery"
             return "✅ DocumentID / InstanceID Match"
         return "⚠️ DocumentID / InstanceID Missing"
@@ -133,16 +134,13 @@ def main():
             st.text_area("Extracted 16-bit Text:", detected_text, height=200)
         
         st.subheader("🛡 VirusTotal Scan")
-        api_key = st.secrets.get("virustotal_api_key", None)
-        if api_key:
-            vt_result = scan_virustotal(api_key, file_hash)
-            if vt_result:
-                st.write("✅ VirusTotal scan results available!")
-                st.json(vt_result)
-            else:
-                st.write("⚠️ VirusTotal scan not available or API error.")
+        api_key = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"  # Directly using user-provided key
+        vt_result = scan_virustotal(api_key, file_hash)
+        if vt_result:
+            st.write("✅ VirusTotal scan results available!")
+            st.json(vt_result)
         else:
-            st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
+            st.write("⚠️ VirusTotal scan not available or API error.")
 
 if __name__ == "__main__":
     main()
