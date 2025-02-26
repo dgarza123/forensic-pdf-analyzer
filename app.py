@@ -12,17 +12,21 @@ def compute_sha256(file_bytes):
 
 def extract_metadata(doc):
     metadata = doc.metadata or {}
+    pdf_version = doc.metadata.get("format", "Unknown")
+    version_years = {"1.4": 2001, "1.5": 2003, "1.6": 2004, "1.7": 2006}
+    release_year = version_years.get(pdf_version, "Unknown")
+    encryption_status = "Secure encryption: No ❌" if "encryption" not in metadata else "Secure encryption: Yes ✅"
+    compliance_status = "Does not meet PDF/A standards for long-term archiving ❌"
+    
     return {
-        "Format": metadata.get("format", "Not Found"),
+        "Format": f"{pdf_version} (released {release_year}) {'❌' if release_year != 'Unknown' and release_year < 2006 else '✅'}",
         "Title": metadata.get("title", "Not Found"),
-        "Author": metadata.get("author", "Not Found"),
-        "Subject": metadata.get("subject", "Not Found"),
-        "Keywords": metadata.get("keywords", "Not Found"),
-        "Creator": metadata.get("creator", "Not Found"),
-        "Producer": metadata.get("producer", "Not Found"),
+        "Producer": metadata.get("producer", "Unknown Producer"),
         "CreationDate": metadata.get("creationDate", "Not Found"),
         "ModDate": metadata.get("modDate", "Not Found"),
+        "Encryption": encryption_status,
         "Trapped": metadata.get("trapped", "Not Found"),
+        "Compliance": compliance_status,
     }
 
 def detect_itext_version(text):
@@ -85,7 +89,7 @@ def main():
         metadata = extract_metadata(doc)
         for key, value in metadata.items():
             st.write(f"**{key}:** {value}")
-            
+        
         st.subheader("📂 iText & JavaScript Detection")
         extracted_text = extract_text_from_pdf(file_bytes)
         itext_version = detect_itext_version(extracted_text)
@@ -111,5 +115,10 @@ def main():
         else:
             st.write("⚠️ No VirusTotal API key configured. Add it in Streamlit Secrets.")
         
+    # Update the file uploader text to reflect the new 4MB limit
+    st.markdown("### Upload a PDF (Max 4MB)")
+    st.write("**Drag and drop file here**")
+    st.write("Limit 4MB per file • PDF")
+    
 if __name__ == "__main__":
     main()
