@@ -3,7 +3,7 @@ import fitz  # PyMuPDF
 import hashlib
 import chardet  # Detects encoding
 import numpy as np
-from scipy.stats import chisquare  # Fix for missing module
+from scipy.stats import chisquare  # Chi-Square test for anomalies
 
 st.title("🔍 Forensic PDF Analyzer")
 
@@ -30,8 +30,8 @@ if uploaded_file is not None:
     # Extract Standard Metadata
     st.subheader("📋 PDF Metadata")
     metadata = doc.metadata
-    metadata_empty = True  # Track if all metadata fields are missing
-    metadata_generic = False  # Track if metadata looks fake
+    metadata_empty = True  
+    metadata_generic = False  
 
     generic_terms = ["PIC", "Unknown", "Untitled", "Not Available", "N/A"]
 
@@ -51,7 +51,16 @@ if uploaded_file is not None:
     if metadata_generic:
         st.warning("⚠️ This metadata appears generic or possibly fake. Some fraudsters modify metadata to mask document origins.")
 
-    # Extract XMP Metadata (Hidden Metadata)
+    # Deep Metadata Analysis - Searching for old metadata remnants
+    st.subheader("📂 Deep Metadata Scan")
+    hidden_metadata = [line for line in pdf_bytes.split(b'\n') if b'/' in line]
+    if hidden_metadata:
+        st.code(hidden_metadata[:10], language="plaintext")  # Show first 10 metadata entries
+        st.warning("⚠️ Possible hidden metadata remnants detected.")
+    else:
+        st.success("✅ No hidden metadata remnants found.")
+
+    # Extract XMP Metadata
     st.subheader("📂 XMP Metadata (Hidden)")
     try:
         xmp = doc.xref_get_key(1, "XMP")
@@ -80,6 +89,7 @@ if uploaded_file is not None:
 
     extracted_text = ""
     detected_encoding = "Unknown"
+    mixed_encoding_flag = False
 
     if doc.page_count > 0:
         first_page = doc[0]
@@ -89,6 +99,10 @@ if uploaded_file is not None:
         encoding_result = chardet.detect(extracted_text.encode())
         detected_encoding = encoding_result['encoding']
 
+        # Detect mixed encodings (basic check)
+        if extracted_text and len(set(detected_encoding)) > 1:
+            mixed_encoding_flag = True
+
         # Attempt to decode non-standard encodings
         if detected_encoding and detected_encoding.lower() in ["utf-16", "utf-16le", "utf-16be"]:
             try:
@@ -96,12 +110,15 @@ if uploaded_file is not None:
             except:
                 extracted_text = "Error decoding 16-bit text."
 
-        # If extracted text is empty, warn the user
         if not extracted_text.strip():
             st.warning("⚠️ No readable text found on the first page. This could indicate hidden or image-based text.")
 
         st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
         st.write(f"🔎 **Detected Encoding:** {detected_encoding if detected_encoding else 'Unknown'}")
+
+        if mixed_encoding_flag:
+            st.error("🚨 Multiple encodings detected! This may indicate manipulation or hidden data.")
+
     else:
         st.warning("No pages found in this document.")
 
@@ -135,10 +152,13 @@ if uploaded_file is not None:
     if pdf_eof_index == -1:
         st.error("🚨 No EOF marker found! This could indicate file corruption or tampering.")
     else:
-        extra_data = len(pdf_bytes) - (pdf_eof_index + 5)
-        st.write(f"📏 **Bytes After EOF:** {extra_data}")
+        extra_data = pdf_bytes[pdf_eof_index + 5:]  # Extract bytes after EOF
+        extra_data_size = len(extra_data)
 
-        if extra_data > 0:
-            st.error(f"🚨 **Suspicious extra data found ({extra_data} bytes) after EOF!** Possible steganography or hidden content.")
+        st.write(f"📏 **Bytes After EOF:** {extra_data_size}")
+
+        if extra_data_size > 0:
+            st.error(f"🚨 **Suspicious extra data found ({extra_data_size} bytes) after EOF!** Possible steganography or hidden content.")
+            st.code(extra_data.hex(), language="plaintext")  # Show hex of extra data
         else:
             st.success("✅ No extra data detected after EOF.")
