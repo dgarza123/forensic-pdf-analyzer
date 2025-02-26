@@ -3,4 +3,5 @@ pymupdf==1.22.5
 watchdog
 chardet
 scipy
+distorm3
 
