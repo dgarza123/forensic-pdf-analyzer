@@ -3,7 +3,7 @@ import fitz  # PyMuPDF
 import hashlib
 import chardet  # Detects encoding
 import numpy as np
-from scipy.stats import chisquare
+from scipy.stats import chisquare  # Fix for missing module
 
 st.title("🔍 Forensic PDF Analyzer")
 
@@ -31,17 +31,25 @@ if uploaded_file is not None:
     st.subheader("📋 PDF Metadata")
     metadata = doc.metadata
     metadata_empty = True  # Track if all metadata fields are missing
+    metadata_generic = False  # Track if metadata looks fake
+
+    generic_terms = ["PIC", "Unknown", "Untitled", "Not Available", "N/A"]
 
     if metadata:
         for key, value in metadata.items():
             if value and value.strip():
                 metadata_empty = False
+                if value in generic_terms or len(value) < 3:  
+                    metadata_generic = True
                 st.write(f"**{key.capitalize()}:** {value}")
             else:
                 st.write(f"**{key.capitalize()}:** Not Found")
 
     if metadata_empty:
         st.error("⚠️ No metadata detected! This could indicate metadata stripping, redaction, or forgery.")
+
+    if metadata_generic:
+        st.warning("⚠️ This metadata appears generic or possibly fake. Some fraudsters modify metadata to mask document origins.")
 
     # Extract XMP Metadata (Hidden Metadata)
     st.subheader("📂 XMP Metadata (Hidden)")
@@ -54,7 +62,7 @@ if uploaded_file is not None:
     except:
         st.write("No XMP metadata found.")
 
-    # Check for JavaScript in the PDF
+    # JavaScript Detection
     st.subheader("⚠️ Advanced JavaScript Detection")
     js_found = False
     for page_num, page in enumerate(doc):
@@ -67,7 +75,7 @@ if uploaded_file is not None:
     if not js_found:
         st.success("✅ No JavaScript found in this PDF.")
 
-    # Extract and Display Text from the First Page with 16-Bit Encoding Detection
+    # Extract and Display Text from First Page with Encoding Detection
     st.subheader("📜 Extracted Text (First Page)")
 
     extracted_text = ""
@@ -91,11 +99,6 @@ if uploaded_file is not None:
         # If extracted text is empty, warn the user
         if not extracted_text.strip():
             st.warning("⚠️ No readable text found on the first page. This could indicate hidden or image-based text.")
-
-        # Check if the page contains images (possible image-based text)
-        images_on_first_page = len(first_page.get_images(full=True))
-        if images_on_first_page > 0 and not extracted_text.strip():
-            st.error("🚨 This page contains images but no text! The document might use image-based text, requiring OCR.")
 
         st.text_area("Extracted Text", extracted_text if extracted_text else "No visible text found.", height=200)
         st.write(f"🔎 **Detected Encoding:** {detected_encoding if detected_encoding else 'Unknown'}")
@@ -125,29 +128,8 @@ if uploaded_file is not None:
     else:
         st.write("✅ No embedded files detected.")
 
-    # Steganography Detection: Chi-Square Analysis & EOF Data
-    st.subheader("🔍 Steganography Analysis")
-
-    # Chi-Square Test for Byte Distribution
-    st.write("📊 **Chi-Square Analysis** (Detects unusual byte distributions)")
-    
-    byte_freq = np.zeros(256, dtype=int)
-    for byte in pdf_bytes:
-        byte_freq[byte] += 1
-
-    expected_freq = np.full(256, len(pdf_bytes) / 256)  # Expected uniform distribution
-    chi_stat, p_value = chisquare(byte_freq, expected_freq)
-
-    st.write(f"📉 **Chi-Square Statistic:** {chi_stat:.2f}")
-    st.write(f"📊 **P-Value:** {p_value:.6f}")
-
-    if p_value < 0.01:
-        st.error("🚨 **Possible anomaly detected!** Byte distribution is unusual—potential hidden data.")
-    else:
-        st.success("✅ No significant anomalies detected in byte distribution.")
-
-    # EOF Analysis: Detect Unexpected Extra Data
-    st.write("📌 **EOF (End of File) Check** (Detects hidden data at the end of PDFs)")
+    # Steganography Detection: EOF Analysis
+    st.subheader("📌 **EOF (End of File) Check** (Detects hidden data at the end of PDFs)")
     
     pdf_eof_index = pdf_bytes.rfind(b'%%EOF')
     if pdf_eof_index == -1:
