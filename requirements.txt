@@ -1,11 +1,12 @@
 streamlit
-pymupdf==1.22.5
-watchdog
-chardet
-scipy
-distorm3
+pymupdf
+pdfplumber
+pytesseract
 pdfminer.six
-python-bidi
-pip install pdfplumber
+distorm3
+requests
+unicodedata
+Pillow
+
 
 
