@@ -5,6 +5,7 @@ import unicodedata
 import chardet
 import io
 import binascii
+import re
 from deep_translator import GoogleTranslator
 from PIL import Image
 
@@ -42,6 +43,53 @@ def hex_to_text(hex_string):
     except:
         return "⚠️ Could not decode hex text"
 
+# Function to extract extra bytes after EOF
+def extract_extra_bytes(pdf_bytes):
+    eof_index = pdf_bytes.rfind(b'%%EOF')
+    if eof_index != -1:
+        extra_data = pdf_bytes[eof_index + 5:]  # Capture bytes after EOF
+        return extra_data.hex() if extra_data else "No extra bytes found."
+    return "No EOF marker found."
+
+# Function to extract object streams from PDFs
+def extract_compressed_objects(pdf_document):
+    suspicious_objects = []
+    for obj in range(pdf_document.xref_length()):
+        try:
+            obj_str = pdf_document.xref_object(obj)
+            if "/ObjStm" in obj_str:
+                suspicious_objects.append(obj_str)
+        except:
+            continue
+    return suspicious_objects if suspicious_objects else "No compressed object streams found."
+
+# Function to detect mixed Unicode encodings
+def detect_mixed_unicode(text):
+    encodings = ["utf-8", "utf-16le", "utf-16be", "utf-32"]
+    detected_variants = []
+    
+    for encoding in encodings:
+        try:
+            decoded_text = text.encode("latin1").decode(encoding)
+            if decoded_text.strip():
+                detected_variants.append(f"{encoding}: {decoded_text[:50]}...")
+        except:
+            continue
+
+    return detected_variants if detected_variants else "No mixed Unicode detected."
+
+# Function to detect suspicious metadata patterns
+def detect_suspicious_metadata(metadata):
+    suspicious_fields = {}
+    hex_pattern = re.compile(r'^[0-9a-fA-F]+$')
+    base64_pattern = re.compile(r'^[A-Za-z0-9+/=]+$')
+
+    for key, value in metadata.items():
+        if hex_pattern.match(value) or base64_pattern.match(value):
+            suspicious_fields[key] = value
+
+    return suspicious_fields if suspicious_fields else "No hidden metadata detected."
+
 # Function to extract metadata
 def extract_pdf_metadata(pdf_document):
     metadata = pdf_document.metadata
@@ -54,26 +102,6 @@ def extract_pdf_metadata(pdf_document):
         "ModDate": metadata.get("modDate", ""),
         "DocumentID": id_values
     }
-
-# Function to detect suspicious PDF generators
-def detect_suspicious_pdf_generator(pdf_document):
-    producer = pdf_document.metadata.get("producer", "").lower()
-    
-    if "abcpdf" in producer:
-        return "⚠️ ABCpdf detected—Possible fraudulent modification!"
-    elif "big faceless" in producer or "bfo" in producer:
-        return "⚠️ BFO PDF Library detected—Check for hidden text!"
-    elif "itext" in producer and "2.17" in producer:
-        return "⚠️ iText 2.17 detected—Known forgery tool!"
-    elif "wci" in producer:
-        return "⚠️ WCI (West Central Indexing) detected—Check metadata manipulation!"
-    elif "chromium" in producer:
-        return "⚠️ Chromium-generated PDF detected—Possible screenshot-based forgery!"
-    elif "libtiff" in producer or "tiff2pdf" in producer:
-        return "⚠️ TIFF-to-PDF Conversion Detected—Possible attempt to hide original text!"
-    elif "pic" in producer:
-        return "⚠️ PIC-generated PDF detected—Check for suspicious patterns!"
-    return "✅ No suspicious PDF software detected."
 
 # Streamlit UI
 st.title("🔍 Forensic PDF Analyzer & Unicode Detector")
@@ -92,9 +120,18 @@ if uploaded_file is not None:
     hex_data = extract_hex_data(cleaned_text)
     decoded_hex_text = hex_to_text(hex_data)
 
-    # Extract metadata and detect suspicious PDF software
+    # Extract extra bytes after EOF
+    extra_bytes = extract_extra_bytes(pdf_bytes)
+
+    # Extract compressed object streams
+    compressed_objects = extract_compressed_objects(pdf_document)
+
+    # Detect mixed Unicode encodings
+    mixed_unicode_results = detect_mixed_unicode(cleaned_text)
+
+    # Extract metadata and detect suspicious patterns
     metadata = extract_pdf_metadata(pdf_document)
-    suspicious_pdf_alert = detect_suspicious_pdf_generator(pdf_document)
+    suspicious_metadata = detect_suspicious_metadata(metadata)
 
     # Display extracted text
     word_count = len(cleaned_text.split())
@@ -110,13 +147,24 @@ if uploaded_file is not None:
     st.subheader("🔎 Decoded Hex Data (Converted Back to Text)")
     st.text_area("Decoded Hex Text", decoded_hex_text, height=150)
     
-    # Show metadata
+    # Show extra bytes after EOF
+    st.subheader("🔎 Extra Bytes After EOF")
+    st.text_area("Extra EOF Data", extra_bytes, height=150)
+    
+    # Show extracted compressed object streams
+    st.subheader("🔎 Compressed Object Streams")
+    st.text_area("Compressed Objects", str(compressed_objects), height=150)
+    
+    # Show mixed Unicode detection results
+    st.subheader("🔎 Mixed Unicode Encoding Detection")
+    st.text_area("Mixed Unicode", str(mixed_unicode_results), height=150)
+    
+    # Show metadata and suspicious fields
     st.subheader("📑 PDF Metadata")
     st.json(metadata)
     
-    # Show fraud detection results
-    st.subheader("🚨 Suspicious PDF Generator Check")
-    st.write(suspicious_pdf_alert)
+    st.subheader("🚨 Suspicious Metadata Fields")
+    st.json(suspicious_metadata)
     
     # Provide a download option for extracted text
     st.download_button(
