@@ -3,8 +3,8 @@ import pdfplumber
 import streamlit as st
 import unicodedata
 import chardet
-import pytesseract
 import io
+import binascii
 from deep_translator import GoogleTranslator
 from PIL import Image
 
@@ -24,6 +24,18 @@ def decode_unicode_text(text):
         return text.encode("latin1").decode(detected_encoding) if detected_encoding else text
     except:
         return unicodedata.normalize("NFKC", text)  # Normalize weird Unicode characters
+
+# Function to detect and extract hidden hex data
+def extract_hex_data(text):
+    hex_data = binascii.hexlify(text.encode()).decode()
+    return hex_data if hex_data else "No hidden hex data detected."
+
+# Function to convert hex back to text and check for hidden content
+def hex_to_text(hex_string):
+    try:
+        return bytes.fromhex(hex_string).decode("utf-8", errors="ignore")
+    except:
+        return "⚠️ Could not decode hex text"
 
 # Function to extract metadata
 def extract_pdf_metadata(pdf_document):
@@ -71,6 +83,10 @@ if uploaded_file is not None:
     extracted_hidden_text = extract_hidden_unicode_text(pdf_document)
     cleaned_text = decode_unicode_text(extracted_hidden_text)
 
+    # Extract hidden hex data
+    hex_data = extract_hex_data(cleaned_text)
+    decoded_hex_text = hex_to_text(hex_data)
+
     # Extract metadata and detect suspicious PDF software
     metadata = extract_pdf_metadata(pdf_document)
     suspicious_pdf_alert = detect_suspicious_pdf_generator(pdf_document)
@@ -81,6 +97,14 @@ if uploaded_file is not None:
     st.write(f"**Word Count:** {word_count}")
     st.text_area("Extracted Text", cleaned_text, height=300)
 
+    # Show extracted hex data
+    st.subheader("🔎 Extracted Hidden Hex Data")
+    st.text_area("Hex Data", hex_data, height=150)
+    
+    # Show decoded hex text
+    st.subheader("🔎 Decoded Hex Data (Converted Back to Text)")
+    st.text_area("Decoded Hex Text", decoded_hex_text, height=150)
+    
     # Show metadata
     st.subheader("📑 PDF Metadata")
     st.json(metadata)
