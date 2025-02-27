@@ -75,8 +75,8 @@ if uploaded_file is not None:
     if not extracted_text:
         extracted_text = extract_text_pdfplumber(pdf_bytes)
 
-    # If both fail, apply OCR
-    if not extracted_text:
+    # If extracted text is missing or just says "Preview," apply OCR
+    if not extracted_text or extracted_text.strip().lower() in ["preview", "preview preview"]:
         extracted_text = extract_text_ocr(pdf_bytes)
 
     # Fix Unicode issues in extracted text
