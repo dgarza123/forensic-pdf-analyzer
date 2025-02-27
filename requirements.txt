@@ -1,10 +1,1 @@
-streamlit
-pymupdf
-pdfplumber
-pytesseract
-pdfminer.six
-requests
-Pillow
-python-bidi
-python-dotenv
-python-dotenv
+pip install streamlit pymupdf pdfplumber pytesseract pdfminer.six python-dotenv bidi Pillow requests
