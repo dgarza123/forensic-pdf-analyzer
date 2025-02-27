@@ -6,3 +6,4 @@ pdfminer.six
 requests
 Pillow
 python-bidi
+pip install python-dotenv
