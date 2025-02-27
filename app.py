@@ -188,6 +188,27 @@ def extract_xmp_metadata(doc):
     except Exception as e:
         return f"⚠️ XMP Metadata Error: {str(e)}"
 
+def search_fraud_markers(text):
+    """
+    Search the provided text for potential fraud markers using regex patterns.
+    Returns a dictionary of marker types and the matches found.
+    """
+    markers = {
+        "T-Numbers": r"\bT-?\d{6,9}\b",
+        "Certificate of Title Numbers": r"Certificate\s*No[:.\s]*\d{6,9}",
+        "APN": r"\b\d{3}[-\s]?\d{2,3}[-\s]?\d{2,3}\b",
+        "PDF Timestamps": r"D:\d{14}",
+        "Alternative Date (YYYY-MM-DD)": r"\b\d{4}-\d{2}-\d{2}\b",
+        "Raw 8-digit Date": r"\b\d{8}\b",
+        "Unix Timestamp": r"\b\d{10}\b"
+    }
+    results = {}
+    for marker, pattern in markers.items():
+        matches = re.findall(pattern, text)
+        if matches:
+            results[marker] = matches
+    return results
+
 ##########################
 #         MAIN APP       #
 ##########################
@@ -257,6 +278,16 @@ def main():
         st.subheader("📑 XMP Metadata Analysis")
         xmp_status = extract_xmp_metadata(doc)
         st.write(xmp_status)
+
+        # Fraud Marker Analysis
+        st.subheader("🔍 Fraud Marker Analysis")
+        # Search the extracted text for fraud markers using our regex patterns.
+        fraud_markers = search_fraud_markers(extracted_text)
+        if fraud_markers:
+            for marker, matches in fraud_markers.items():
+                st.write(f"**{marker}:** {', '.join(matches)}")
+        else:
+            st.write("✅ No fraud markers detected.")
 
 if __name__ == "__main__":
     main()
