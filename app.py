@@ -3,12 +3,15 @@ import fitz  # PyMuPDF
 import hashlib
 import re
 import requests
+import pdfplumber
+import pytesseract
 from pdfminer.high_level import extract_text
 from distorm3 import Decode, Decode32Bits
 from io import BytesIO
 from datetime import datetime
 import unicodedata
 from bidi.algorithm import get_display
+from PIL import Image
 
 def compute_sha256(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
@@ -43,10 +46,20 @@ def detect_js_objects(doc):
 
 def extract_text_from_pdf(file_bytes):
     try:
-        with BytesIO(file_bytes) as f:
-            return extract_text(f)
+        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+            return text.strip() if text else "⚠️ No extractable text found."
     except Exception as e:
         return f"Error extracting text: {str(e)}"
+
+def extract_text_with_ocr(file_bytes):
+    try:
+        with pdfplumber.open(BytesIO(file_bytes)) as pdf:
+            images = [page.to_image().original for page in pdf.pages]
+            ocr_text = "\n".join(pytesseract.image_to_string(img) for img in images if img)
+            return ocr_text.strip() if ocr_text else "⚠️ OCR failed to extract text."
+    except Exception as e:
+        return f"Error extracting OCR text: {str(e)}"
 
 def detect_16bit_encoded_text(file_bytes):
     try:
@@ -115,7 +128,6 @@ def main():
         
         st.subheader("📄 File Details")
         st.write(f"Filename: {uploaded_file.name}")
-        st.write(f"File Size: {len(file_bytes)} bytes")
         st.write(f"SHA-256 Hash: {file_hash}")
         
         st.subheader("📋 PDF Metadata")
@@ -123,28 +135,15 @@ def main():
         for key, value in metadata.items():
             st.write(f"**{key}:** {value}")
         
-        st.write(detect_js_objects(doc))
-        
-        binary_alerts = analyze_binary_code(file_bytes)
-        for alert in binary_alerts:
-            st.write(alert)
-        
-        st.subheader("📂 XMP Metadata Verification")
-        st.write(extract_xmp_metadata(doc))
-        
-        detected_text = detect_16bit_encoded_text(file_bytes)
-        if detected_text:
-            st.subheader("🕵️ Hidden 16-bit Encoded Text")
-            st.text_area("Extracted 16-bit Text:", detected_text, height=200)
+        extracted_text = extract_text_from_pdf(file_bytes)
+        if "⚠️" in extracted_text:
+            extracted_text = extract_text_with_ocr(file_bytes)
+        st.text_area("Extracted Text:", extracted_text, height=200)
         
         st.subheader("🛡 VirusTotal Scan")
         api_key = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"
         vt_result = scan_virustotal(api_key, file_hash)
-        if vt_result:
-            st.write("✅ VirusTotal scan results available!")
-            st.json(vt_result)
-        else:
-            st.write("⚠️ VirusTotal scan not available or API error.")
+        st.json(vt_result) if vt_result else st.write("⚠️ VirusTotal scan not available or API error.")
 
 if __name__ == "__main__":
     main()
