@@ -1,7 +1,9 @@
 streamlit
+fitz
 pymupdf
 pdfplumber
-chardet
 pytesseract
 Pillow
-deep_translator
+deep-translator
+unicodedata
+chardet
