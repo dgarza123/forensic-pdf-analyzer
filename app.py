@@ -56,7 +56,7 @@ def extract_metadata(doc, file_bytes):
 
     # Mark as severely outdated if known release year is less than 2007
     if release_year != "Unknown" and release_year < 2007:
-        version_status = "❌ Bad (Severely Outdated)"
+        version_status = "❌ Severely Outdated"
     else:
         version_status = "✅ Good"
 
