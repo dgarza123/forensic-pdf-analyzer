@@ -8,14 +8,19 @@ import binascii
 from deep_translator import GoogleTranslator
 from PIL import Image
 
-# Function to extract hidden Unicode text
+# Function to extract hidden Unicode text from PDFs
 def extract_hidden_unicode_text(pdf_document):
     hidden_text = []
     for page in pdf_document:
-        raw_text = page.get_text("raw")  # Extracts hidden Unicode text
-        if raw_text.strip():
-            hidden_text.append(raw_text)
-    return "\n\n".join(hidden_text) if hidden_text else None
+        try:
+            text_dict = page.get_text("dict")  # Extracts text along with encoding info
+            extracted_text = " ".join([block["text"] for block in text_dict["blocks"] if "text" in block])
+            if extracted_text.strip():
+                hidden_text.append(extracted_text)
+        except Exception as e:
+            hidden_text.append(f"⚠️ Error extracting text from page: {str(e)}")
+    
+    return "\n\n".join(hidden_text) if hidden_text else "⚠️ No extractable hidden Unicode text found."
 
 # Function to fix Unicode issues
 def decode_unicode_text(text):
