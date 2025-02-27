@@ -3,8 +3,5 @@ pymupdf
 pdfplumber
 pytesseract
 pdfminer.six
-distorm3
 requests
-unicodedata
 Pillow
-pip install pdfplumber
