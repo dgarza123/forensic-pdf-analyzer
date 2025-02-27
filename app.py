@@ -4,6 +4,7 @@ import streamlit as st
 import unicodedata
 import chardet
 import pytesseract
+import io
 from pdf2image import convert_from_bytes
 from deep_translator import GoogleTranslator
 from PIL import Image
@@ -21,7 +22,7 @@ def extract_text_pymupdf(pdf_document):
 # Function to extract text using PDFPlumber (fallback)
 def extract_text_pdfplumber(pdf_bytes):
     extracted_text = []
-    with pdfplumber.open(pdf_bytes) as pdf:
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:  # ✅ Wrap bytes in BytesIO to fix the error
         for page in pdf.pages:
             text = page.extract_text()
             if text:
