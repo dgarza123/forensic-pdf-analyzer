@@ -60,6 +60,12 @@ def hex_to_text(hex_string):
 def check_for_1999(text):
     return "1999 found in extracted text!" if "1999" in text else "1999 not found."
 
+# Function to detect suspicious keywords and URLs
+def detect_suspicious_terms(text):
+    suspicious_terms = ["wc3.org", "adobe.com", "WCI", "West Central", "Torrens", "1T3XT", "iText 2.1.7"]
+    found_terms = [term for term in suspicious_terms if term.lower() in text.lower()]
+    return found_terms if found_terms else "No suspicious terms detected."
+
 # Function to extract extra bytes after EOF
 def extract_extra_bytes(pdf_bytes):
     eof_index = pdf_bytes.rfind(b'%%EOF')
@@ -83,6 +89,9 @@ if uploaded_file is not None:
 
     # Check for 1999 in extracted text
     found_1999 = check_for_1999(cleaned_text)
+    
+    # Check for suspicious keywords
+    found_suspicious_terms = detect_suspicious_terms(cleaned_text)
 
     # Extract metadata
     metadata = extract_pdf_metadata(pdf_document)
@@ -103,6 +112,10 @@ if uploaded_file is not None:
     # Display 1999 detection results
     st.subheader("🔎 Check for 1999 in Extracted Text")
     st.write(found_1999)
+    
+    # Display suspicious keyword detection
+    st.subheader("🔎 Suspicious Keywords & URLs Detected")
+    st.write(found_suspicious_terms)
 
     # Show extracted hex data
     st.subheader("🔎 Extracted Hidden Hex Data")
