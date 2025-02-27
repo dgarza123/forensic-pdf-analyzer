@@ -1,85 +1,102 @@
 import fitz  # PyMuPDF
+import pdfplumber
 import streamlit as st
+import unicodedata
+import chardet
+import pytesseract
+from pdf2image import convert_from_bytes
+from deep_translator import GoogleTranslator
+from PIL import Image
 
-# Function to extract text from PDF
-def extract_text_from_pdf(pdf_document):
+# Function to extract text using PyMuPDF
+def extract_text_pymupdf(pdf_document):
     extracted_text = []
     for page_num in range(len(pdf_document)):
         page = pdf_document.load_page(page_num)
-        text = page.get_text("text")  # Use "text" mode for better accuracy
-        if text.strip():  # Only add non-empty text
+        text = page.get_text("text")
+        if text.strip():
             extracted_text.append(text)
-    return "\n\n".join(extracted_text) if extracted_text else "⚠️ No readable text found."
+    return "\n\n".join(extracted_text) if extracted_text else None
 
-# Function to detect JavaScript in the PDF (security check)
-def detect_javascript_in_pdf(pdf_document):
-    js_keywords = ["/JavaScript", "/JS", "/Action", "/OpenAction"]
-    for page_num in range(len(pdf_document)):
-        page = pdf_document.load_page(page_num)
+# Function to extract text using PDFPlumber (fallback)
+def extract_text_pdfplumber(pdf_bytes):
+    extracted_text = []
+    with pdfplumber.open(pdf_bytes) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                extracted_text.append(text)
+    return "\n\n".join(extracted_text) if extracted_text else None
 
-        # Check annotations for JavaScript actions
-        for annot in page.annots():
-            if annot and annot.type[0] == 15:  # Rich Media annotation (potential JavaScript)
-                return True
+# Function to apply OCR (for scanned PDFs)
+def extract_text_ocr(pdf_bytes):
+    extracted_text = []
+    images = convert_from_bytes(pdf_bytes)
+    for image in images:
+        text = pytesseract.image_to_string(image)
+        if text.strip():
+            extracted_text.append(text)
+    return "\n\n".join(extracted_text) if extracted_text else None
 
-        # Scan page text for JavaScript keywords
-        raw_text = page.get_text("text")
-        if any(keyword in raw_text for keyword in js_keywords):
-            return True
-
-    return False
-
-# Function to check for embedded files (security check)
-def detect_embedded_files(pdf_document):
-    embedded_files = []
+# Function to fix Unicode issues
+def fix_unicode_text(text):
+    if not text:
+        return ""
+    normalized_text = unicodedata.normalize("NFKC", text)
+    detected_encoding = chardet.detect(text.encode())["encoding"]
     try:
-        if hasattr(pdf_document, "embedded_files"):
-            for file_info in pdf_document.embedded_files():
-                embedded_files.append(file_info[0])  # Extract filename if available
+        return text.encode("latin1").decode(detected_encoding) if detected_encoding else normalized_text
+    except:
+        return normalized_text
+
+# Function to translate text (uses GoogleTranslator without API key)
+def translate_text(text, target_lang="en"):
+    if not text.strip():
+        return "⚠️ No text to translate."
+    try:
+        return GoogleTranslator(source="auto", target=target_lang).translate(text)
     except Exception as e:
-        st.error(f"Error checking for embedded files: {e}")
-    return embedded_files
+        return f"Translation failed: {str(e)}"
 
 # Streamlit UI
-st.title("🔍 Forensic PDF Analyzer")
+st.title("🔍 Forensic PDF Text Extractor & Translator")
 
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
 
 if uploaded_file is not None:
-    pdf_document = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    pdf_bytes = uploaded_file.read()
+    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    # Detect JavaScript security risks
-    has_javascript = detect_javascript_in_pdf(pdf_document)
-    if has_javascript:
-        st.warning("🚨 Warning: This PDF contains JavaScript, which may pose security risks.")
-    else:
-        st.success("✅ No JavaScript detected in the PDF.")
+    # Try extracting text with PyMuPDF first
+    extracted_text = extract_text_pymupdf(pdf_document)
 
-    # Detect Embedded Files (potential security risk)
-    embedded_files = detect_embedded_files(pdf_document)
-    if embedded_files:
-        st.warning("🚨 Warning: This PDF contains embedded files:")
-        for file in embedded_files:
-            st.write(f"- {file}")
-    else:
-        st.success("✅ No embedded files detected in the PDF.")
+    # If PyMuPDF fails, try PDFPlumber
+    if not extracted_text:
+        extracted_text = extract_text_pdfplumber(pdf_bytes)
 
-    # Extract and display text with enhancements
-    extracted_text = extract_text_from_pdf(pdf_document)
-    word_count = len(extracted_text.split())
+    # If both fail, apply OCR
+    if not extracted_text:
+        extracted_text = extract_text_ocr(pdf_bytes)
 
+    # Fix Unicode issues in extracted text
+    cleaned_text = fix_unicode_text(extracted_text)
+
+    # Show extracted text
+    word_count = len(cleaned_text.split())
     st.subheader("📄 Extracted Text")
     st.write(f"**Word Count:** {word_count}")
-    
-    if word_count > 0:
-        st.text_area("Extracted Text", extracted_text, height=400)
-    else:
-        st.warning("⚠️ No readable text found. The document may be scanned or encrypted.")
+    st.text_area("Extracted Text", cleaned_text, height=300)
+
+    # Translate text to English
+    if st.button("Translate to English"):
+        translated_text = translate_text(cleaned_text)
+        st.subheader("🌍 Translated Text (English)")
+        st.text_area("Translated Text", translated_text, height=300)
 
     # Provide a download option for extracted text
     st.download_button(
         label="📥 Download Extracted Text",
-        data=extracted_text,
+        data=cleaned_text,
         file_name="extracted_text.txt",
         mime="text/plain"
     )
