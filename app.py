@@ -6,7 +6,6 @@ import requests
 import pdfplumber
 import pytesseract
 from pdfminer.high_level import extract_text
-from distorm3 import Decode, Decode32Bits
 from io import BytesIO
 from datetime import datetime
 import unicodedata
@@ -78,21 +77,6 @@ def detect_16bit_encoded_text(file_bytes):
         return None
     except Exception:
         return None
-
-def analyze_binary_code(file_bytes):
-    binary_alerts = []
-    try:
-        raw_bytes = bytes(file_bytes)
-        if len(raw_bytes) == 0:
-            return ["⚠️ No binary data found."]
-        
-        decoded_instructions = Decode(raw_bytes, Decode32Bits)
-        for offset, size, instruction in decoded_instructions:
-            if "PUSH" in instruction or "CALL" in instruction:
-                binary_alerts.append(f"🚨 Suspicious binary operation: {instruction} at offset {offset}")
-    except Exception as e:
-        binary_alerts.append(f"⚠️ diStorm64 error: {str(e)}")
-    return binary_alerts
 
 def scan_virustotal(api_key, file_hash):
     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
