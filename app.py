@@ -37,8 +37,14 @@ def extract_text_ocr(pdf_bytes):
         pix = page.get_pixmap()  # Convert page to an image
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         text = pytesseract.image_to_string(img)
-        if text.strip():
-            extracted_text.append(text)
+
+        # 🚨 Remove common unwanted words like "Preview"
+        filtered_text = "\n".join(
+            line for line in text.split("\n") if "preview" not in line.lower()
+        )
+
+        if filtered_text.strip():
+            extracted_text.append(filtered_text)
     
     return "\n\n".join(extracted_text) if extracted_text else None
 
@@ -71,8 +77,14 @@ if uploaded_file is not None:
     pdf_bytes = uploaded_file.read()
     pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    # Try extracting text with PyMuPDF first
+    # Extract text from hidden text layers before OCR
     extracted_text = extract_text_pymupdf(pdf_document)
+
+    # If the extracted text only says "Preview," check for hidden text
+    if extracted_text and extracted_text.strip().lower() in ["preview", "preview preview"]:
+        extracted_text = "\n".join(
+            page.get_text("text") for page in pdf_document if page.get_text("text").strip()
+        )
 
     # If PyMuPDF fails, try PDFPlumber
     if not extracted_text:
