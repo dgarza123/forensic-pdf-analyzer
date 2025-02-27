@@ -31,6 +31,19 @@ def decode_unicode_text(text):
     except:
         return unicodedata.normalize("NFKC", text)  # Normalize weird Unicode characters
 
+# Function to extract metadata
+def extract_pdf_metadata(pdf_document):
+    metadata = pdf_document.metadata
+    id_values = pdf_document.xref_get_key(1, "ID")  # Extracts unique PDF document ID
+    return {
+        "Title": metadata.get("title", ""),
+        "Author": metadata.get("author", ""),
+        "Producer": metadata.get("producer", ""),
+        "CreationDate": metadata.get("creationDate", ""),
+        "ModDate": metadata.get("modDate", ""),
+        "DocumentID": id_values
+    }
+
 # Function to detect and extract hidden hex data
 def extract_hex_data(text):
     hex_data = binascii.hexlify(text.encode()).decode()
@@ -55,52 +68,6 @@ def extract_extra_bytes(pdf_bytes):
         return extra_data.hex() if extra_data else "No extra bytes found."
     return "No EOF marker found."
 
-# Function to extract object streams from PDFs
-def extract_compressed_objects(pdf_document):
-    suspicious_objects = []
-    for obj in range(pdf_document.xref_length()):
-        try:
-            obj_str = pdf_document.xref_object(obj)
-            if "/ObjStm" in obj_str:
-                suspicious_objects.append(obj_str)
-        except:
-            continue
-    return suspicious_objects if suspicious_objects else "No compressed object streams found."
-
-# Function to detect mixed Unicode encodings
-def detect_mixed_unicode(text):
-    encodings = ["utf-8", "utf-16le", "utf-16be", "utf-32"]
-    detected_variants = []
-    
-    for encoding in encodings:
-        try:
-            decoded_text = text.encode("latin1").decode(encoding)
-            if decoded_text.strip():
-                detected_variants.append(f"{encoding}: {decoded_text[:50]}...")
-        except:
-            continue
-
-    return detected_variants if detected_variants else "No mixed Unicode detected."
-
-# Function to detect suspicious metadata patterns
-def detect_suspicious_metadata(metadata):
-    suspicious_fields = {}
-    hex_pattern = re.compile(r'^[0-9a-fA-F]+$')
-    base64_pattern = re.compile(r'^[A-Za-z0-9+/=]+$')
-    url_pattern = re.compile(r'https?://[^\s]+')  # Detects hidden URLs
-
-    for key, value in metadata.items():
-        if isinstance(value, list):  # Convert lists to strings
-            value = " ".join(map(str, value))
-        if value is None:  # Skip None values
-            continue
-        value = str(value)  # Ensure it's a string
-
-        if hex_pattern.match(value) or base64_pattern.match(value) or url_pattern.search(value):
-            suspicious_fields[key] = value
-
-    return suspicious_fields if suspicious_fields else "No hidden metadata detected."
-
 # Streamlit UI
 st.title("🔍 Forensic PDF Analyzer & Unicode Detector")
 
@@ -117,22 +84,15 @@ if uploaded_file is not None:
     # Check for 1999 in extracted text
     found_1999 = check_for_1999(cleaned_text)
 
+    # Extract metadata
+    metadata = extract_pdf_metadata(pdf_document)
+    
     # Extract hidden hex data
     hex_data = extract_hex_data(cleaned_text)
     decoded_hex_text = hex_to_text(hex_data)
 
     # Extract extra bytes after EOF
     extra_bytes = extract_extra_bytes(pdf_bytes)
-
-    # Extract compressed object streams
-    compressed_objects = extract_compressed_objects(pdf_document)
-
-    # Detect mixed Unicode encodings
-    mixed_unicode_results = detect_mixed_unicode(cleaned_text)
-
-    # Extract metadata and detect suspicious fields
-    metadata = extract_pdf_metadata(pdf_document)
-    suspicious_metadata = detect_suspicious_metadata(metadata)
 
     # Display extracted text
     word_count = len(cleaned_text.split())
@@ -156,20 +116,9 @@ if uploaded_file is not None:
     st.subheader("🔎 Extra Bytes After EOF")
     st.text_area("Extra EOF Data", extra_bytes, height=150)
     
-    # Show extracted compressed object streams
-    st.subheader("🔎 Compressed Object Streams")
-    st.text_area("Compressed Objects", str(compressed_objects), height=150)
-    
-    # Show mixed Unicode detection results
-    st.subheader("🔎 Mixed Unicode Encoding Detection")
-    st.text_area("Mixed Unicode", str(mixed_unicode_results), height=150)
-    
     # Show metadata and suspicious fields
     st.subheader("📑 PDF Metadata")
     st.json(metadata)
-    
-    st.subheader("🚨 Suspicious Metadata Fields (Including Hidden URLs)")
-    st.json(suspicious_metadata)
     
     # Provide a download option for extracted text
     st.download_button(
