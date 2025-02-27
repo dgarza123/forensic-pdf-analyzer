@@ -43,6 +43,10 @@ def hex_to_text(hex_string):
     except:
         return "⚠️ Could not decode hex text"
 
+# Function to check if the year 1999 appears in the extracted text
+def check_for_1999(text):
+    return "1999 found in extracted text!" if "1999" in text else "1999 not found."
+
 # Function to extract extra bytes after EOF
 def extract_extra_bytes(pdf_bytes):
     eof_index = pdf_bytes.rfind(b'%%EOF')
@@ -83,25 +87,19 @@ def detect_suspicious_metadata(metadata):
     suspicious_fields = {}
     hex_pattern = re.compile(r'^[0-9a-fA-F]+$')
     base64_pattern = re.compile(r'^[A-Za-z0-9+/=]+$')
+    url_pattern = re.compile(r'https?://[^\s]+')  # Detects hidden URLs
 
     for key, value in metadata.items():
-        if hex_pattern.match(value) or base64_pattern.match(value):
+        if isinstance(value, list):  # Convert lists to strings
+            value = " ".join(map(str, value))
+        if value is None:  # Skip None values
+            continue
+        value = str(value)  # Ensure it's a string
+
+        if hex_pattern.match(value) or base64_pattern.match(value) or url_pattern.search(value):
             suspicious_fields[key] = value
 
     return suspicious_fields if suspicious_fields else "No hidden metadata detected."
-
-# Function to extract metadata
-def extract_pdf_metadata(pdf_document):
-    metadata = pdf_document.metadata
-    id_values = pdf_document.xref_get_key(1, "ID")  # Extracts unique PDF document ID
-    return {
-        "Title": metadata.get("title", ""),
-        "Author": metadata.get("author", ""),
-        "Producer": metadata.get("producer", ""),
-        "CreationDate": metadata.get("creationDate", ""),
-        "ModDate": metadata.get("modDate", ""),
-        "DocumentID": id_values
-    }
 
 # Streamlit UI
 st.title("🔍 Forensic PDF Analyzer & Unicode Detector")
@@ -116,6 +114,9 @@ if uploaded_file is not None:
     extracted_hidden_text = extract_hidden_unicode_text(pdf_document)
     cleaned_text = decode_unicode_text(extracted_hidden_text)
 
+    # Check for 1999 in extracted text
+    found_1999 = check_for_1999(cleaned_text)
+
     # Extract hidden hex data
     hex_data = extract_hex_data(cleaned_text)
     decoded_hex_text = hex_to_text(hex_data)
@@ -129,7 +130,7 @@ if uploaded_file is not None:
     # Detect mixed Unicode encodings
     mixed_unicode_results = detect_mixed_unicode(cleaned_text)
 
-    # Extract metadata and detect suspicious patterns
+    # Extract metadata and detect suspicious fields
     metadata = extract_pdf_metadata(pdf_document)
     suspicious_metadata = detect_suspicious_metadata(metadata)
 
@@ -138,6 +139,10 @@ if uploaded_file is not None:
     st.subheader("📄 Extracted Hidden Unicode Text")
     st.write(f"**Word Count:** {word_count}")
     st.text_area("Extracted Text", cleaned_text, height=300)
+    
+    # Display 1999 detection results
+    st.subheader("🔎 Check for 1999 in Extracted Text")
+    st.write(found_1999)
 
     # Show extracted hex data
     st.subheader("🔎 Extracted Hidden Hex Data")
@@ -163,7 +168,7 @@ if uploaded_file is not None:
     st.subheader("📑 PDF Metadata")
     st.json(metadata)
     
-    st.subheader("🚨 Suspicious Metadata Fields")
+    st.subheader("🚨 Suspicious Metadata Fields (Including Hidden URLs)")
     st.json(suspicious_metadata)
     
     # Provide a download option for extracted text
