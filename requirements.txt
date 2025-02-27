@@ -5,5 +5,4 @@ pdfplumber
 pytesseract
 Pillow
 deep-translator
-unicodedata
 chardet
