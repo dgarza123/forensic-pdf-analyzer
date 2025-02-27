@@ -5,7 +5,6 @@ import unicodedata
 import chardet
 import pytesseract
 import io
-from pdf2image import convert_from_bytes
 from deep_translator import GoogleTranslator
 from PIL import Image
 
@@ -22,21 +21,25 @@ def extract_text_pymupdf(pdf_document):
 # Function to extract text using PDFPlumber (fallback)
 def extract_text_pdfplumber(pdf_bytes):
     extracted_text = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:  # ✅ Wrap bytes in BytesIO to fix the error
+    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
             text = page.extract_text()
             if text:
                 extracted_text.append(text)
     return "\n\n".join(extracted_text) if extracted_text else None
 
-# Function to apply OCR (for scanned PDFs)
+# Function to apply OCR (without pdf2image)
 def extract_text_ocr(pdf_bytes):
     extracted_text = []
-    images = convert_from_bytes(pdf_bytes)
-    for image in images:
-        text = pytesseract.image_to_string(image)
+    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    
+    for page in pdf_document:
+        pix = page.get_pixmap()  # Convert page to an image
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        text = pytesseract.image_to_string(img)
         if text.strip():
             extracted_text.append(text)
+    
     return "\n\n".join(extracted_text) if extracted_text else None
 
 # Function to fix Unicode issues
