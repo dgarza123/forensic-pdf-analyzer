@@ -6,3 +6,4 @@ pdfminer.six
 python-bidi
 Pillow
 requests
+openai
