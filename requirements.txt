@@ -7,3 +7,4 @@ requests
 Pillow
 python-bidi
 python-dotenv
+python-dotenv
