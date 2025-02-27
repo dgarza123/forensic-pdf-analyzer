@@ -10,7 +10,7 @@ import unicodedata
 from bidi.algorithm import get_display
 from PIL import Image
 import binascii
-import openai  # Make sure openai is installed: pip install openai
+import openai  # Ensure you have the latest version installed
 
 ##########################
 #   Helper Functions     #
@@ -212,21 +212,21 @@ def search_fraud_markers(text):
 
 def analyze_with_openai(prompt, api_key):
     """
-    Use OpenAI's API to analyze the provided prompt.
-    Ensure you have set the OpenAI API key in your Streamlit Secrets under 'openai_api_key'.
+    Use OpenAI's ChatCompletion API to analyze the provided prompt.
+    Ensure your OpenAI API key is set in your Streamlit Secrets under 'openai_api_key'.
     """
     try:
         openai.api_key = api_key
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=prompt,
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=200,
             temperature=0.2,
             top_p=1,
             frequency_penalty=0,
             presence_penalty=0
         )
-        return response.choices[0].text.strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         return f"Error calling OpenAI API: {str(e)}"
 
@@ -312,9 +312,10 @@ def main():
         # Optional: OpenAI Analysis
         if "openai_api_key" in st.secrets:
             st.subheader("🤖 OpenAI Analysis")
+            # Here, we use the first 1000 characters of the extracted text as context
             prompt = ("Analyze the following hexadecimal snippet from a PDF file for potential "
                       "fraud markers or suspicious obfuscation techniques:\n\n" +
-                      extracted_text[:1000])  # Using the first 1000 characters of extracted text as context
+                      extracted_text[:1000])
             openai_response = analyze_with_openai(prompt, st.secrets["openai_api_key"])
             st.text_area("OpenAI Analysis", openai_response, height=200)
         else:
