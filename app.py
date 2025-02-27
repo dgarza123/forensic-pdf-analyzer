@@ -26,7 +26,7 @@ def extract_metadata(doc, file_bytes):
       1. doc.pdf_version (if available),
       2. The file header from file_bytes,
       3. Finally, falls back to doc.metadata.
-    If creation or modification dates are missing, displays a warning.
+    If creation or modification dates are missing, displays a note.
     """
     # Attempt to get doc.pdf_version if it exists
     pdf_version = getattr(doc, "pdf_version", None)
@@ -70,13 +70,13 @@ def extract_metadata(doc, file_bytes):
     compliance_status = "❌ Not PDF/A Compliant"
     metadata_dict = doc.metadata or {}
     
-    # Check for creation and modification dates; if missing, flag as missing.
+    # Check for creation and modification dates; if missing, note they were sanitized.
     creation_date = metadata_dict.get("creationDate", "Unknown")
     if creation_date == "Unknown":
-        creation_date = "❌ Authentic marks missing"
+        creation_date = "Sanitized by PDF source"
     modification_date = metadata_dict.get("modDate", "Unknown")
     if modification_date == "Unknown":
-        modification_date = "❌ Authentic marks missing"
+        modification_date = "Sanitized by PDF source"
 
     format_str = f"PDF {pdf_version_str} (released {release_year}) {version_status}"
 
@@ -118,23 +118,29 @@ def extract_text_with_ocr(file_bytes):
 def detect_16bit_encoded_text(file_bytes):
     """
     Attempt to detect hidden JavaScript or suspicious strings in various 16-bit encodings.
+    This function now logs the raw normalized Unicode text for debugging if no patterns are found.
     """
     try:
         encodings = ["utf-16", "utf-16le", "utf-16be", "utf-8"]
+        detected_text = ""
         for encoding in encodings:
             try:
                 text = file_bytes.decode(encoding, errors="replace").strip()
                 if text:
                     normalized_text = get_display(unicodedata.normalize("NFKC", text))
+                    detected_text += f"\n--- Decoded with {encoding} ---\n{normalized_text}\n"
+                    # Try finding obfuscated JavaScript patterns
                     js_patterns = re.findall(
                         r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()",
                         normalized_text
                     )
                     if js_patterns:
-                        return f"🚨 Hidden JavaScript detected in Unicode text! Found: {', '.join(set(js_patterns))}"
-                    return normalized_text
+                        return f"🚨 Hidden JavaScript detected! Found: {', '.join(set(js_patterns))}\n{detected_text}"
             except Exception:
                 continue
+        # If nothing suspicious is found, return the raw decoded text for inspection
+        if detected_text:
+            return detected_text
         return None
     except Exception:
         return None
