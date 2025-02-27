@@ -7,7 +7,6 @@ import pdfplumber
 import pytesseract
 from pdfminer.high_level import extract_text
 from io import BytesIO
-from datetime import datetime
 import unicodedata
 from bidi.algorithm import get_display
 from PIL import Image
@@ -16,14 +15,17 @@ def compute_sha256(file_bytes):
     return hashlib.sha256(file_bytes).hexdigest()
 
 def extract_metadata(doc):
+    if doc.is_encrypted:
+        return {"Error": "❌ PDF is encrypted. Unable to extract metadata."}
+    
     metadata = doc.metadata or {}
     pdf_version = metadata.get("format", "Unknown")
     version_years = {"1.4": 2001, "1.5": 2003, "1.6": 2004, "1.7": 2006}
     release_year = version_years.get(pdf_version, "Unknown")
-    version_status = "❌ Bad (Outdated)" if release_year != "Unknown" and release_year < 2007 else "✅ Good"
+    version_status = "❌ Outdated" if release_year != "Unknown" and release_year < 2007 else "✅ Up-to-date"
     
-    encryption_status = "❌ Content is encrypted, but signatures are missing" if "encryption" in metadata else "✅ No Encryption"
-    compliance_status = "❌ Does not meet PDF/A standards for long-term archiving"
+    encryption_status = "✅ No Encryption" if not doc.is_encrypted else "❌ Encrypted (May hide modifications)"
+    compliance_status = "❌ Not PDF/A Compliant"
     
     creation_date = metadata.get("creationDate", "Unknown")
     modification_date = metadata.get("modDate", "Unknown")
@@ -38,10 +40,11 @@ def extract_metadata(doc):
 
 def detect_js_objects(doc):
     for page in doc:
-        text = page.get_text("text")
-        if any(keyword in text for keyword in ["/OpenAction", "/JS", "/JavaScript", "/AA", "/Action"]):
-            return "🚨 JavaScript/OpenAction reference found!"
-    return "✅ No JavaScript found in this PDF."
+        for obj in page.get_text("dict")["blocks"]:
+            text = obj.get("text", "")
+            if any(kw in text for kw in ["/OpenAction", "/JS", "/JavaScript", "/AA", "/Action"]):
+                return "🚨 JavaScript/OpenAction reference found!"
+    return "✅ No JavaScript detected."
 
 def extract_text_from_pdf(file_bytes):
     try:
@@ -60,41 +63,23 @@ def extract_text_with_ocr(file_bytes):
     except Exception as e:
         return f"Error extracting OCR text: {str(e)}"
 
-def detect_16bit_encoded_text(file_bytes):
+def detect_xmp_metadata(doc):
     try:
-        encodings = ["utf-16", "utf-16le", "utf-16be", "utf-8"]
-        for encoding in encodings:
-            try:
-                text = file_bytes.decode(encoding, errors="replace").strip()
-                if text:
-                    normalized_text = get_display(unicodedata.normalize("NFKC", text))
-                    js_patterns = re.findall(r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()", normalized_text)
-                    if js_patterns:
-                        return f"🚨 Hidden JavaScript detected in Unicode text! Found: {', '.join(set(js_patterns))}"
-                    return normalized_text
-            except Exception:
-                continue
-        return None
+        xref_obj = doc.xref_object(1)
+        if "/ID" in xref_obj:
+            ids = re.findall(r'\[(.*?)\]', xref_obj)
+            if len(ids) == 2 and ids[0] != ids[1]:
+                return "❌ DocumentID / InstanceID Mismatch - Possible Forgery"
+            return "✅ DocumentID / InstanceID Match"
+        return "⚠️ DocumentID / InstanceID Missing"
     except Exception:
-        return None
+        return "⚠️ Error Extracting XMP Metadata"
 
 def scan_virustotal(api_key, file_hash):
     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
     headers = {"x-apikey": api_key}
     response = requests.get(url, headers=headers)
     return response.json() if response.status_code == 200 else None
-
-def extract_xmp_metadata(doc):
-    try:
-        xmp_metadata = doc.metadata.get("/ID", None)
-        if xmp_metadata:
-            ids = xmp_metadata.strip("[]").split()
-            if len(ids) == 2 and ids[0] != ids[1]:
-                return "❌ DocumentID / InstanceID Mismatch - Possible Forgery"
-            return "✅ DocumentID / InstanceID Match"
-        return "⚠️ DocumentID / InstanceID Missing"
-    except Exception as e:
-        return f"⚠️ XMP Metadata Error: {str(e)}"
 
 def main():
     st.set_page_config(page_title="Forensic PDF Analyzer", layout="wide", initial_sidebar_state="collapsed", page_icon="🔍")
@@ -124,10 +109,21 @@ def main():
             extracted_text = extract_text_with_ocr(file_bytes)
         st.text_area("Extracted Text:", extracted_text, height=200)
         
+        st.subheader("🛡 JavaScript Detection")
+        js_detection = detect_js_objects(doc)
+        st.write(js_detection)
+        
+        st.subheader("📑 XMP Metadata Analysis")
+        xmp_result = detect_xmp_metadata(doc)
+        st.write(xmp_result)
+        
         st.subheader("🛡 VirusTotal Scan")
-        api_key = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"
-        vt_result = scan_virustotal(api_key, file_hash)
-        st.json(vt_result) if vt_result else st.write("⚠️ VirusTotal scan not available or API error.")
+        api_key = st.secrets["VT_API_KEY"] if "VT_API_KEY" in st.secrets else None
+        if api_key:
+            vt_result = scan_virustotal(api_key, file_hash)
+            st.json(vt_result) if vt_result else st.write("⚠️ VirusTotal scan not available or API error.")
+        else:
+            st.write("⚠️ VirusTotal API key missing. Scan disabled.")
 
 if __name__ == "__main__":
     main()
