@@ -1,0 +1,9 @@
+streamlit
+pymupdf
+pdfplumber
+unicodedata
+chardet
+pytesseract
+Pillow
+pdf2image
+deep_translator
