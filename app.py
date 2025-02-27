@@ -3,14 +3,13 @@ import subprocess
 import fitz  # PyMuPDF
 import hashlib
 import re
-import requests
 import pdfplumber
 import pytesseract
-from pdfminer.high_level import extract_text
 from io import BytesIO
 import unicodedata
 from bidi.algorithm import get_display
 from PIL import Image
+import binascii
 
 ##########################
 #   Helper Functions     #
@@ -129,48 +128,62 @@ def extract_text_with_ocr(file_bytes):
 def detect_16bit_encoded_text(file_bytes):
     """
     Attempt to detect hidden JavaScript or suspicious strings in various 16-bit encodings.
-    Logs the raw normalized Unicode text for debugging if no patterns are found.
+    This function decodes the file using multiple encodings and returns the raw decoded text.
+    It also converts the entire file to hex and binary representations for additional analysis.
     """
-    try:
-        encodings = ["utf-16", "utf-16le", "utf-16be", "utf-8"]
-        detected_text = ""
-        for encoding in encodings:
-            try:
-                text = file_bytes.decode(encoding, errors="replace").strip()
-                if text:
-                    normalized_text = get_display(unicodedata.normalize("NFKC", text))
-                    detected_text += f"\n--- Decoded with {encoding} ---\n{normalized_text}\n"
-                    # Try finding obfuscated JavaScript patterns
-                    js_patterns = re.findall(
-                        r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()",
-                        normalized_text
-                    )
-                    if js_patterns:
-                        return f"🚨 Hidden JavaScript detected! Found: {', '.join(set(js_patterns))}\n{detected_text}"
-            except Exception:
-                continue
-        # If nothing suspicious is found, return the raw decoded text for inspection if available
-        if detected_text:
-            return detected_text
-        return None
-    except Exception:
-        return None
+    result = ""
+    # Try decoding using several encodings and log the output
+    encodings = ["utf-16", "utf-16le", "utf-16be", "utf-8"]
+    for encoding in encodings:
+        try:
+            text = file_bytes.decode(encoding, errors="replace").strip()
+            if text:
+                normalized_text = get_display(unicodedata.normalize("NFKC", text))
+                result += f"\n--- Decoded with {encoding} ---\n{normalized_text}\n"
+                js_patterns = re.findall(
+                    r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()",
+                    normalized_text
+                )
+                if js_patterns:
+                    result += f"\n🚨 Hidden JavaScript detected! Patterns: {', '.join(set(js_patterns))}\n"
+        except Exception:
+            continue
 
-def scan_virustotal(api_key, file_hash):
-    """Query the VirusTotal API for the given file hash and return detailed error info if not successful."""
-    url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
-    headers = {"x-apikey": api_key}
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        # Return detailed error information for troubleshooting
-        return {
-            "error": {
-                "status_code": response.status_code,
-                "message": response.text
-            }
-        }
+    # Convert the entire file to a hex string and look for suspicious patterns
+    try:
+        hex_data = binascii.hexlify(file_bytes).decode("utf-8")
+        result += f"\n--- Hexadecimal Representation ---\n{hex_data}\n"
+        # Example: Look for hex representation of "eval(" which is 6576616c28
+        if "6576616c28" in hex_data.lower():
+            result += "\n🚨 Found 'eval(' in hex representation!\n"
+    except Exception as e:
+        result += f"\nError converting file to hex: {str(e)}\n"
+
+    # Convert the entire file to binary (a string of 0s and 1s) if desired (this can be very long)
+    try:
+        bin_data = bin(int(binascii.hexlify(file_bytes), 16))[2:]
+        result += f"\n--- Binary Representation (truncated) ---\n{bin_data[:500]}...\n"
+    except Exception as e:
+        result += f"\nError converting file to binary: {str(e)}\n"
+
+    return result if result.strip() != "" else None
+
+def detect_hidden_data(file_bytes):
+    """
+    Check for hidden data appended after the PDF's EOF marker.
+    """
+    eof_marker = b"%%EOF"
+    eof_index = file_bytes.rfind(eof_marker)
+    if eof_index != -1 and eof_index < len(file_bytes) - len(eof_marker):
+        hidden = file_bytes[eof_index + len(eof_marker):]
+        if hidden.strip():
+            try:
+                # Attempt to decode the hidden data
+                hidden_text = hidden.decode("latin1", errors="replace")
+            except Exception:
+                hidden_text = str(hidden)
+            return f"🚨 Hidden data found after EOF:\n{hidden_text}"
+    return "✅ No hidden data found after EOF."
 
 def extract_xmp_metadata(doc):
     """Check for DocumentID / InstanceID in XMP metadata to detect mismatch."""
@@ -241,6 +254,11 @@ def main():
         else:
             st.write("✅ No suspicious 16-bit encoded text found.")
         
+        # Hidden data detection (e.g., after EOF marker)
+        st.subheader("🕵️ Hidden Data Detection")
+        hidden_result = detect_hidden_data(file_bytes)
+        st.write(hidden_result)
+        
         # JavaScript detection
         st.subheader("🛡 JavaScript Detection")
         js_status = detect_js_objects(doc)
@@ -250,18 +268,6 @@ def main():
         st.subheader("📑 XMP Metadata Analysis")
         xmp_status = extract_xmp_metadata(doc)
         st.write(xmp_status)
-        
-        # VirusTotal Scan using Streamlit Secrets
-        st.subheader("🛡 VirusTotal Scan")
-        if "virustotal_api_key" in st.secrets:
-            vt_key = st.secrets["virustotal_api_key"]
-            vt_result = scan_virustotal(vt_key, file_hash)
-            if vt_result:
-                st.json(vt_result)
-            else:
-                st.write("⚠️ VirusTotal scan not available or API error.")
-        else:
-            st.write("⚠️ VirusTotal API key missing in Streamlit Secrets. Scan disabled.")
 
 if __name__ == "__main__":
     main()
