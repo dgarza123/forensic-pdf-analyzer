@@ -6,4 +6,6 @@ scipy
 distorm3
 pdfminer.six
 python-bidi
+pip install pdfplumber
+
 
