@@ -4,9 +4,9 @@ from google.cloud import translate_v2 as translate
 import os
 import json
 
-# Load Google Cloud credentials from Streamlit secrets
+# Load Google Cloud credentials from Streamlit Secrets
 if "GOOGLE_APPLICATION_CREDENTIALS" in st.secrets:
-    credentials_json = st.secrets["GOOGLE_APPLICATION_CREDENTIALS"]
+    credentials_json = json.loads(st.secrets["GOOGLE_APPLICATION_CREDENTIALS"])
 
     # Save the credentials to a temporary file
     temp_credentials_path = "/tmp/gcp_credentials.json"
