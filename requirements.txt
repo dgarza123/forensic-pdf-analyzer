@@ -5,4 +5,4 @@ pytesseract
 pdfminer.six
 requests
 Pillow
-pip install python-bidi
+python-bidi
