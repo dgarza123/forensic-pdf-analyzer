@@ -17,7 +17,7 @@ from PIL import Image
 ##########################
 
 # YOUR VirusTotal API key (for demonstration only).
-# Recommended: move this to a .env file for better security.
+# For production, move this to a .env file and load it securely.
 VIRUSTOTAL_API_KEY = "3cc8d84f66577cd5cccb7357cf121b36d12d81cc7b690d58439abf6bc69d0c52"
 
 
@@ -33,22 +33,22 @@ def compute_sha256(file_bytes):
 def extract_metadata(doc):
     """
     Extract PDF metadata and identify the PDF version.
-    This function tries:
-      1) doc.pdf_version (float from PyMuPDF)
-      2) doc.metadata['format'] if pdf_version is None or zero
+    This function attempts to:
+      1) Use doc.pdf_version if available,
+      2) Otherwise, use doc.metadata['format'].
     """
-    # Attempt doc.pdf_version (often a float, e.g. 1.4)
-    pdf_version = doc.pdf_version
+    # Attempt to safely get doc.pdf_version using getattr.
+    pdf_version = getattr(doc, "pdf_version", None)
     if pdf_version is not None and pdf_version != 0:
-        # Convert float to string (1.4 -> "1.4")
+        # Convert float to string (e.g., 1.4 -> "1.4")
         pdf_version_str = f"{pdf_version:.1f}"
     else:
         # Fallback to metadata
         meta_format = (doc.metadata or {}).get("format", "Unknown")
-        # Sometimes meta_format is "PDF 1.4" or just "1.4"
+        # Remove any leading "PDF " if present
         pdf_version_str = meta_format.upper().replace("PDF ", "").strip()
 
-    # Known versions -> release years
+    # Dictionary mapping known PDF versions to their release years
     version_years = {
         "1.4": 2001,
         "1.5": 2003,
@@ -56,16 +56,16 @@ def extract_metadata(doc):
         "1.7": 2006
     }
 
-    # Determine release year
+    # Determine the release year
     release_year = version_years.get(pdf_version_str, "Unknown")
 
-    # Mark as severely outdated if year < 2007 and known
+    # Mark as severely outdated if the release year is known and less than 2007
     if release_year != "Unknown" and release_year < 2007:
         version_status = "❌ Bad (Severely Outdated)"
     else:
         version_status = "✅ Good"
 
-    # Encryption check (this simplistic approach may need refining)
+    # Check encryption status (this simple check may need refinement)
     if "encryption" in (doc.metadata or {}):
         encryption_status = "❌ Content is encrypted, but signatures are missing"
     else:
@@ -74,12 +74,12 @@ def extract_metadata(doc):
     # Hard-coded compliance status for demonstration
     compliance_status = "❌ Not PDF/A Compliant"
 
-    # Grab creation/modification dates from metadata
+    # Retrieve creation and modification dates from metadata
     metadata_dict = doc.metadata or {}
     creation_date = metadata_dict.get("creationDate", "Unknown")
     modification_date = metadata_dict.get("modDate", "Unknown")
 
-    # Construct final string for PDF version
+    # Construct the final format string
     format_str = f"PDF {pdf_version_str} (released {release_year}) {version_status}"
 
     return {
@@ -137,9 +137,9 @@ def detect_16bit_encoded_text(file_bytes):
             try:
                 text = file_bytes.decode(encoding, errors="replace").strip()
                 if text:
-                    # Normalize and handle right-to-left
+                    # Normalize and handle right-to-left text
                     normalized_text = get_display(unicodedata.normalize("NFKC", text))
-                    # Look for typical JS patterns
+                    # Look for typical JavaScript patterns
                     js_patterns = re.findall(
                         r"(?i)(eval\(|document\.|window\.|script>|onload=|setTimeout\()",
                         normalized_text
