@@ -10,6 +10,7 @@ import unicodedata
 from bidi.algorithm import get_display
 from PIL import Image
 import binascii
+import openai  # Make sure openai is installed: pip install openai
 
 ##########################
 #   Helper Functions     #
@@ -209,6 +210,26 @@ def search_fraud_markers(text):
             results[marker] = matches
     return results
 
+def analyze_with_openai(prompt, api_key):
+    """
+    Use OpenAI's API to analyze the provided prompt.
+    Ensure you have set the OpenAI API key in your Streamlit Secrets under 'openai_api_key'.
+    """
+    try:
+        openai.api_key = api_key
+        response = openai.Completion.create(
+            engine="text-davinci-003",
+            prompt=prompt,
+            max_tokens=200,
+            temperature=0.2,
+            top_p=1,
+            frequency_penalty=0,
+            presence_penalty=0
+        )
+        return response.choices[0].text.strip()
+    except Exception as e:
+        return f"Error calling OpenAI API: {str(e)}"
+
 ##########################
 #         MAIN APP       #
 ##########################
@@ -281,13 +302,23 @@ def main():
 
         # Fraud Marker Analysis
         st.subheader("🔍 Fraud Marker Analysis")
-        # Search the extracted text for fraud markers using our regex patterns.
         fraud_markers = search_fraud_markers(extracted_text)
         if fraud_markers:
             for marker, matches in fraud_markers.items():
                 st.write(f"**{marker}:** {', '.join(matches)}")
         else:
             st.write("✅ No fraud markers detected.")
+
+        # Optional: OpenAI Analysis
+        if "openai_api_key" in st.secrets:
+            st.subheader("🤖 OpenAI Analysis")
+            prompt = ("Analyze the following hexadecimal snippet from a PDF file for potential "
+                      "fraud markers or suspicious obfuscation techniques:\n\n" +
+                      extracted_text[:1000])  # Using the first 1000 characters of extracted text as context
+            openai_response = analyze_with_openai(prompt, st.secrets["openai_api_key"])
+            st.text_area("OpenAI Analysis", openai_response, height=200)
+        else:
+            st.write("⚠️ OpenAI API key not found in secrets. Skipping OpenAI analysis.")
 
 if __name__ == "__main__":
     main()
