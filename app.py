@@ -31,7 +31,9 @@ def detect_javascript_in_pdf(pdf_document):
 # Function to check for embedded files (security check)
 def detect_embedded_files(pdf_document):
     embedded_files = []
-    for i in range(pdf_document.embfile_count):  # Loop through embedded files
+    
+    # Corrected: Access `embfile_count` as an attribute, not a function
+    for i in range(pdf_document.embfile_count):  
         info = pdf_document.embfile_info(i)
         embedded_files.append(info["filename"])
     return embedded_files
