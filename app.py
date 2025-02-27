@@ -18,7 +18,7 @@ def detect_javascript_in_pdf(pdf_document):
 
         # Check annotations for JavaScript actions
         for annot in page.annots():
-            if annot.type[0] == 15:  # Rich Media annotation (potential JavaScript)
+            if annot and annot.type[0] == 15:  # Rich Media annotation (potential JavaScript)
                 return True
 
         # Scan page text for JavaScript keywords
@@ -30,7 +30,11 @@ def detect_javascript_in_pdf(pdf_document):
 
 # Function to check for embedded files (security check)
 def detect_embedded_files(pdf_document):
-    return pdf_document.embeddedFileNames()
+    embedded_files = []
+    for i in range(pdf_document.embfile_count):  # Loop through embedded files
+        info = pdf_document.embfile_info(i)
+        embedded_files.append(info["filename"])
+    return embedded_files
 
 # Streamlit UI
 st.title("🔍 Forensic PDF Analyzer")
