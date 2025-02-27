@@ -8,68 +8,58 @@ import io
 from deep_translator import GoogleTranslator
 from PIL import Image
 
-# Function to extract text using PyMuPDF
-def extract_text_pymupdf(pdf_document):
-    extracted_text = []
-    for page_num in range(len(pdf_document)):
-        page = pdf_document.load_page(page_num)
-        text = page.get_text("text")
-        if text.strip():
-            extracted_text.append(text)
-    return "\n\n".join(extracted_text) if extracted_text else None
-
-# Function to extract text using PDFPlumber (fallback)
-def extract_text_pdfplumber(pdf_bytes):
-    extracted_text = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                extracted_text.append(text)
-    return "\n\n".join(extracted_text) if extracted_text else None
-
-# Function to apply OCR (without pdf2image)
-def extract_text_ocr(pdf_bytes):
-    extracted_text = []
-    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
-    
+# Function to extract hidden Unicode text
+def extract_hidden_unicode_text(pdf_document):
+    hidden_text = []
     for page in pdf_document:
-        pix = page.get_pixmap()  # Convert page to an image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        text = pytesseract.image_to_string(img)
-
-        # 🚨 Remove common unwanted words like "Preview"
-        filtered_text = "\n".join(
-            line for line in text.split("\n") if "preview" not in line.lower()
-        )
-
-        if filtered_text.strip():
-            extracted_text.append(filtered_text)
-    
-    return "\n\n".join(extracted_text) if extracted_text else None
+        raw_text = page.get_text("raw")  # Extracts hidden Unicode text
+        if raw_text.strip():
+            hidden_text.append(raw_text)
+    return "\n\n".join(hidden_text) if hidden_text else None
 
 # Function to fix Unicode issues
-def fix_unicode_text(text):
-    if not text:
-        return ""
-    normalized_text = unicodedata.normalize("NFKC", text)
+def decode_unicode_text(text):
     detected_encoding = chardet.detect(text.encode())["encoding"]
     try:
-        return text.encode("latin1").decode(detected_encoding) if detected_encoding else normalized_text
+        return text.encode("latin1").decode(detected_encoding) if detected_encoding else text
     except:
-        return normalized_text
+        return unicodedata.normalize("NFKC", text)  # Normalize weird Unicode characters
 
-# Function to translate text (uses GoogleTranslator without API key)
-def translate_text(text, target_lang="en"):
-    if not text.strip():
-        return "⚠️ No text to translate."
-    try:
-        return GoogleTranslator(source="auto", target=target_lang).translate(text)
-    except Exception as e:
-        return f"Translation failed: {str(e)}"
+# Function to extract metadata
+def extract_pdf_metadata(pdf_document):
+    metadata = pdf_document.metadata
+    id_values = pdf_document.xref_get_key(1, "ID")  # Extracts unique PDF document ID
+    return {
+        "Title": metadata.get("title", ""),
+        "Author": metadata.get("author", ""),
+        "Producer": metadata.get("producer", ""),
+        "CreationDate": metadata.get("creationDate", ""),
+        "ModDate": metadata.get("modDate", ""),
+        "DocumentID": id_values
+    }
+
+# Function to detect suspicious PDF generators
+def detect_suspicious_pdf_generator(pdf_document):
+    producer = pdf_document.metadata.get("producer", "").lower()
+    
+    if "abcpdf" in producer:
+        return "⚠️ ABCpdf detected—Possible fraudulent modification!"
+    elif "big faceless" in producer or "bfo" in producer:
+        return "⚠️ BFO PDF Library detected—Check for hidden text!"
+    elif "itext" in producer and "2.17" in producer:
+        return "⚠️ iText 2.17 detected—Known forgery tool!"
+    elif "wci" in producer:
+        return "⚠️ WCI (West Central Indexing) detected—Check metadata manipulation!"
+    elif "chromium" in producer:
+        return "⚠️ Chromium-generated PDF detected—Possible screenshot-based forgery!"
+    elif "libtiff" in producer or "tiff2pdf" in producer:
+        return "⚠️ TIFF-to-PDF Conversion Detected—Possible attempt to hide original text!"
+    elif "pic" in producer:
+        return "⚠️ PIC-generated PDF detected—Check for suspicious patterns!"
+    return "✅ No suspicious PDF software detected."
 
 # Streamlit UI
-st.title("🔍 Forensic PDF Text Extractor & Translator")
+st.title("🔍 Forensic PDF Analyzer & Unicode Detector")
 
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
 
@@ -77,38 +67,28 @@ if uploaded_file is not None:
     pdf_bytes = uploaded_file.read()
     pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
 
-    # Extract text from hidden text layers before OCR
-    extracted_text = extract_text_pymupdf(pdf_document)
+    # Extract hidden Unicode text
+    extracted_hidden_text = extract_hidden_unicode_text(pdf_document)
+    cleaned_text = decode_unicode_text(extracted_hidden_text)
 
-    # If the extracted text only says "Preview," check for hidden text
-    if extracted_text and extracted_text.strip().lower() in ["preview", "preview preview"]:
-        extracted_text = "\n".join(
-            page.get_text("text") for page in pdf_document if page.get_text("text").strip()
-        )
+    # Extract metadata and detect suspicious PDF software
+    metadata = extract_pdf_metadata(pdf_document)
+    suspicious_pdf_alert = detect_suspicious_pdf_generator(pdf_document)
 
-    # If PyMuPDF fails, try PDFPlumber
-    if not extracted_text:
-        extracted_text = extract_text_pdfplumber(pdf_bytes)
-
-    # If extracted text is missing or just says "Preview," apply OCR
-    if not extracted_text or extracted_text.strip().lower() in ["preview", "preview preview"]:
-        extracted_text = extract_text_ocr(pdf_bytes)
-
-    # Fix Unicode issues in extracted text
-    cleaned_text = fix_unicode_text(extracted_text)
-
-    # Show extracted text
+    # Display extracted text
     word_count = len(cleaned_text.split())
-    st.subheader("📄 Extracted Text")
+    st.subheader("📄 Extracted Hidden Unicode Text")
     st.write(f"**Word Count:** {word_count}")
     st.text_area("Extracted Text", cleaned_text, height=300)
 
-    # Translate text to English
-    if st.button("Translate to English"):
-        translated_text = translate_text(cleaned_text)
-        st.subheader("🌍 Translated Text (English)")
-        st.text_area("Translated Text", translated_text, height=300)
-
+    # Show metadata
+    st.subheader("📑 PDF Metadata")
+    st.json(metadata)
+    
+    # Show fraud detection results
+    st.subheader("🚨 Suspicious PDF Generator Check")
+    st.write(suspicious_pdf_alert)
+    
     # Provide a download option for extracted text
     st.download_button(
         label="📥 Download Extracted Text",
