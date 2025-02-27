@@ -32,11 +32,13 @@ def detect_javascript_in_pdf(pdf_document):
 def detect_embedded_files(pdf_document):
     embedded_files = []
     
-    # Check if there are embedded files
-    if pdf_document.embfile_count > 0:
-        for i in range(int(pdf_document.embfile_count)):  # Ensure it's an integer
-            info = pdf_document.embfile_info(i)
-            embedded_files.append(info["filename"])
+    try:
+        # Check if there are embedded files
+        if hasattr(pdf_document, "embedded_files"):
+            for file_info in pdf_document.embedded_files():
+                embedded_files.append(file_info[0])  # Extract filename if available
+    except Exception as e:
+        st.error(f"Error checking for embedded files: {e}")
 
     return embedded_files
 
