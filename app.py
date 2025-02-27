@@ -10,7 +10,7 @@ import unicodedata
 from bidi.algorithm import get_display
 from PIL import Image
 import binascii
-import openai  # Ensure you have openai>=1.0.0 installed
+import openai  # Make sure you have openai>=1.0.0 installed
 
 ##########################
 #   Helper Functions     #
@@ -212,15 +212,15 @@ def search_fraud_markers(text):
 
 def analyze_with_openai(prompt, api_key):
     """
-    Use OpenAI's ChatCompletion API (gpt-3.5-turbo) to analyze the provided prompt.
-    This uses the new interface with a system message for context.
+    Use OpenAI's ChatCompletion API (new interface) to analyze the provided prompt.
+    This uses a system message to set context.
     """
     try:
         openai.api_key = api_key
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a forensic analyst specializing in PDF fraud detection. Analyze the following text snippet for potential fraud markers or obfuscated JavaScript."},
+                {"role": "system", "content": "You are a forensic analyst specializing in PDF fraud detection. Analyze the following text snippet for potential fraud markers or suspicious obfuscation techniques."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=200,
@@ -316,8 +316,8 @@ def main():
         if "openai_api_key" in st.secrets:
             st.subheader("🤖 OpenAI Analysis")
             # Use the first 1000 characters of the extracted text as context
-            prompt = ("Analyze the following snippet from a PDF file for potential fraud markers or suspicious obfuscation techniques:\n\n" +
-                      extracted_text[:1000])
+            prompt = ("Analyze the following snippet from a PDF file for potential fraud markers "
+                      "or suspicious obfuscation techniques:\n\n" + extracted_text[:1000])
             openai_response = analyze_with_openai(prompt, st.secrets["openai_api_key"])
             st.text_area("OpenAI Analysis", openai_response, height=200)
         else:
