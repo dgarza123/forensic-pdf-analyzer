@@ -3,16 +3,17 @@ import streamlit as st
 
 # Function to extract text from PDF
 def extract_text_from_pdf(pdf_document):
-    extracted_text = ""
+    extracted_text = []
     for page_num in range(len(pdf_document)):
         page = pdf_document.load_page(page_num)
-        extracted_text += page.get_text()
-    return extracted_text
+        text = page.get_text("text")  # Use "text" mode for better accuracy
+        if text.strip():  # Only add non-empty text
+            extracted_text.append(text)
+    return "\n\n".join(extracted_text) if extracted_text else "⚠️ No readable text found."
 
 # Function to detect JavaScript in the PDF (security check)
 def detect_javascript_in_pdf(pdf_document):
     js_keywords = ["/JavaScript", "/JS", "/Action", "/OpenAction"]
-
     for page_num in range(len(pdf_document)):
         page = pdf_document.load_page(page_num)
 
@@ -31,15 +32,12 @@ def detect_javascript_in_pdf(pdf_document):
 # Function to check for embedded files (security check)
 def detect_embedded_files(pdf_document):
     embedded_files = []
-    
     try:
-        # Check if there are embedded files
         if hasattr(pdf_document, "embedded_files"):
             for file_info in pdf_document.embedded_files():
                 embedded_files.append(file_info[0])  # Extract filename if available
     except Exception as e:
         st.error(f"Error checking for embedded files: {e}")
-
     return embedded_files
 
 # Streamlit UI
@@ -55,7 +53,7 @@ if uploaded_file is not None:
     if has_javascript:
         st.warning("🚨 Warning: This PDF contains JavaScript, which may pose security risks.")
     else:
-        st.info("✅ No JavaScript detected in the PDF.")
+        st.success("✅ No JavaScript detected in the PDF.")
 
     # Detect Embedded Files (potential security risk)
     embedded_files = detect_embedded_files(pdf_document)
@@ -64,8 +62,24 @@ if uploaded_file is not None:
         for file in embedded_files:
             st.write(f"- {file}")
     else:
-        st.info("✅ No embedded files detected in the PDF.")
+        st.success("✅ No embedded files detected in the PDF.")
 
-    # Extract and display text
+    # Extract and display text with enhancements
     extracted_text = extract_text_from_pdf(pdf_document)
-    st.text_area("Extracted Text", extracted_text, height=300)
+    word_count = len(extracted_text.split())
+
+    st.subheader("📄 Extracted Text")
+    st.write(f"**Word Count:** {word_count}")
+    
+    if word_count > 0:
+        st.text_area("Extracted Text", extracted_text, height=400)
+    else:
+        st.warning("⚠️ No readable text found. The document may be scanned or encrypted.")
+
+    # Provide a download option for extracted text
+    st.download_button(
+        label="📥 Download Extracted Text",
+        data=extracted_text,
+        file_name="extracted_text.txt",
+        mime="text/plain"
+    )
