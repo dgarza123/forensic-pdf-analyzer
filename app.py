@@ -26,6 +26,7 @@ def extract_metadata(doc, file_bytes):
       1. doc.pdf_version (if available),
       2. The file header from file_bytes,
       3. Finally, falls back to doc.metadata.
+    If creation or modification dates are missing, displays a warning.
     """
     # Attempt to get doc.pdf_version if it exists
     pdf_version = getattr(doc, "pdf_version", None)
@@ -68,8 +69,14 @@ def extract_metadata(doc, file_bytes):
 
     compliance_status = "❌ Not PDF/A Compliant"
     metadata_dict = doc.metadata or {}
+    
+    # Check for creation and modification dates; if missing, flag as missing.
     creation_date = metadata_dict.get("creationDate", "Unknown")
+    if creation_date == "Unknown":
+        creation_date = "❌ Authentic marks missing"
     modification_date = metadata_dict.get("modDate", "Unknown")
+    if modification_date == "Unknown":
+        modification_date = "❌ Authentic marks missing"
 
     format_str = f"PDF {pdf_version_str} (released {release_year}) {version_status}"
 
@@ -133,13 +140,20 @@ def detect_16bit_encoded_text(file_bytes):
         return None
 
 def scan_virustotal(api_key, file_hash):
-    """Query the VirusTotal API for the given file hash."""
+    """Query the VirusTotal API for the given file hash and return detailed error info if not successful."""
     url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
     headers = {"x-apikey": api_key}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return response.json()
-    return None
+    else:
+        # Return detailed error information for troubleshooting
+        return {
+            "error": {
+                "status_code": response.status_code,
+                "message": response.text
+            }
+        }
 
 def extract_xmp_metadata(doc):
     """Check for DocumentID / InstanceID in XMP metadata to detect mismatch."""
