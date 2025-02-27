@@ -35,7 +35,7 @@ def extract_metadata(doc, file_bytes):
       1. doc.pdf_version (if available),
       2. The file header from file_bytes,
       3. Finally, falls back to doc.metadata.
-    If creation or modification dates are missing or empty, displays "Sanitized by PDF source."
+    If creation or modification dates are missing or empty, displays "⚠️ Sanitized by PDF source."
     """
     # Attempt to get doc.pdf_version if it exists
     pdf_version = getattr(doc, "pdf_version", None)
@@ -82,12 +82,12 @@ def extract_metadata(doc, file_bytes):
     # Handle creation date: treat empty string as missing
     creation_date = metadata_dict.get("creationDate", "")
     if not creation_date or creation_date.strip() == "":
-        creation_date = "Sanitized by PDF source"
+        creation_date = "⚠️ Sanitized by PDF source"
 
     # Handle modification date: treat empty string as missing
     modification_date = metadata_dict.get("modDate", "")
     if not modification_date or modification_date.strip() == "":
-        modification_date = "Sanitized by PDF source"
+        modification_date = "⚠️ Sanitized by PDF source"
 
     format_str = f"PDF {pdf_version_str} (released {release_year}) {version_status}"
 
