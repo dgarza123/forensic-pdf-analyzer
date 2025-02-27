@@ -32,10 +32,12 @@ def detect_javascript_in_pdf(pdf_document):
 def detect_embedded_files(pdf_document):
     embedded_files = []
     
-    # Corrected: Access `embfile_count` as an attribute, not a function
-    for i in range(pdf_document.embfile_count):  
-        info = pdf_document.embfile_info(i)
-        embedded_files.append(info["filename"])
+    # Check if there are embedded files
+    if pdf_document.embfile_count > 0:
+        for i in range(int(pdf_document.embfile_count)):  # Ensure it's an integer
+            info = pdf_document.embfile_info(i)
+            embedded_files.append(info["filename"])
+
     return embedded_files
 
 # Streamlit UI
