@@ -1,4 +1,11 @@
 streamlit
 pymupdf
+pdfplumber
+unicodedata
+pytesseract
+Pillow
+pdf2image
+python-magic
+chardet
+pycryptodome
 requests
-google-cloud-translate
