@@ -1,5 +1,4 @@
 streamlit
 pymupdf
 requests
-pip install --upgrade pymupdf
 
