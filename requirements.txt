@@ -3,7 +3,6 @@ PyMuPDF
 pdfplumber
 pytesseract
 pdfminer.six
-python-dotenv
 python-bidi
 Pillow
 requests
