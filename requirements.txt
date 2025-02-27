@@ -2,10 +2,8 @@ streamlit
 pymupdf
 pdfplumber
 unicodedata
+chardet
 pytesseract
 Pillow
 pdf2image
-python-magic
-chardet
-pycryptodome
-requests
+deep_translator
